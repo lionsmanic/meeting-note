@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="拍照速記">
+<meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F141D" media="(prefers-color-scheme: dark)">
+<title>開會拍照速記</title>
+<style>
+:root{
+  --paper:#F5F6F8; --sheet:#FFFFFF; --ink:#16233B; --ink2:#5B6779; --rule:#D7DCE5;
+  --pen:#1F4FBF; --hl:#FFE45C; --hl-soft:#FFE45C; --red:#B93227; --ok:#1E7A52;
+  --serif:"Songti TC","Noto Serif TC","Source Han Serif TC","PMingLiU",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --paper:#0F141D; --sheet:#18202E; --ink:#E7EBF2; --ink2:#98A4B6; --rule:#2A3445;
+    --pen:#8FB0FF; --hl-soft:rgba(255,228,92,.26); --red:#FF8478; --ok:#6FD3A4; }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--sans);-webkit-tap-highlight-color:transparent}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--pen);outline-offset:2px}
+#app{max-width:760px;margin:0 auto;padding:0 16px calc(120px + env(safe-area-inset-bottom))}
+.view{display:none}
+.view.on{display:block}
+
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding-top:env(safe-area-inset-top)}
+.top h1{font:700 1.5rem/1.2 var(--serif);margin:0;letter-spacing:.02em}
+.txt{background:none;border:0;color:var(--pen);padding:10px 4px;min-height:44px;text-decoration:none;font-size:1rem}
+.lede{color:var(--ink2);margin:2px 0 18px;max-width:34em}
+.notice{border-left:4px solid var(--hl);background:var(--sheet);padding:12px 14px;margin:0 0 18px;font-size:.95rem}
+.notice .txt{padding:0;min-height:0;text-decoration:underline}
+.empty{color:var(--ink2);padding:48px 0;text-align:center}
+
+/* 場次列表 */
+.sess{list-style:none;margin:0;padding:0;border-top:1px solid var(--rule)}
+.sess a{display:block;padding:14px 0;border-bottom:1px solid var(--rule);color:inherit;text-decoration:none}
+.sess b{display:block;font:700 1.1rem/1.35 var(--serif)}
+.sess span{color:var(--ink2);font-size:.88rem}
+
+/* 場次資訊 */
+.meta input{width:100%;background:none;border:0;border-bottom:1px solid var(--rule);padding:8px 0;border-radius:0}
+.meta input::placeholder,textarea::placeholder{color:var(--ink2);opacity:.75}
+#mTitle{font:700 1.35rem/1.3 var(--serif)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.row2 input{font-size:.95rem}
+
+.tabs{display:flex;gap:22px;margin:18px 0 0;border-bottom:1px solid var(--rule)}
+.tabs button{background:none;border:0;padding:10px 0;min-height:44px;color:var(--ink2);border-bottom:3px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--ink);font-weight:700;border-bottom-color:var(--hl)}
+
+.batch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;font-size:.9rem;color:var(--ink2)}
+.btn{white-space:nowrap;background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:9px 14px;min-height:44px}
+.btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink);font-weight:700}
+.btn.danger{color:var(--red)}
+.btn:disabled{opacity:.5}
+
+/* 投影片列表：一列一張，照拍攝順序 */
+.slides{list-style:none;margin:0;padding:0}
+.slides a{display:grid;grid-template-columns:112px 1fr;gap:12px;padding:12px 0;border-bottom:1px solid var(--rule);color:inherit;text-decoration:none;align-items:start}
+.thumb{position:relative;aspect-ratio:4/3;background:#000;overflow:hidden;border-radius:3px}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb i{position:absolute;left:0;top:0;background:var(--hl);color:#16233B;font:700 .78rem/1 var(--sans);font-style:normal;padding:4px 6px;font-variant-numeric:tabular-nums}
+.slides h3{margin:0 0 2px;font:700 1rem/1.35 var(--serif)}
+.slides p{margin:0;font-size:.88rem;color:var(--ink2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.slides .st{font-size:.8rem;margin-top:4px}
+.st.err{color:var(--red)} .st.busy{color:var(--pen)}
+
+/* 底部操作列 */
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-top:1px solid var(--rule);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:none;z-index:5}
+.view.on .bar{display:block}
+.bar > div{max-width:728px;margin:0 auto;display:grid;gap:10px;align-items:center}
+.bar .three{grid-template-columns:1fr 1.5fr 1fr}
+.bar .btn{width:100%;min-height:52px}
+.bar .shoot{font-size:1.1rem}
+
+/* 單張 */
+.stage{position:relative;background:#000;margin:0 -16px;line-height:0}
+.stage img{width:100%;height:auto;display:block}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.stage.draw canvas{pointer-events:auto;touch-action:none;cursor:crosshair}
+.tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--rule)}
+.tools .btn{padding:6px 12px;min-height:40px;font-size:.9rem}
+.tools .btn.on{background:var(--hl);border-color:var(--hl);color:#16233B;font-weight:700}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--rule);padding:0}
+.sw.on{outline:3px solid var(--pen);outline-offset:2px}
+.drawset{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+label.f{display:block;font-size:.85rem;color:var(--ink2);margin:16px 0 6px}
+textarea{width:100%;background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;line-height:1.6;resize:vertical}
+.aihead{display:flex;align-items:center;justify-content:space-between;margin-top:22px;border-top:1px solid var(--rule);padding-top:8px}
+.aihead span{font-size:.85rem;color:var(--ink2)}
+.foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:28px}
+.foot .btn{font-size:.9rem}
+
+/* AI 筆記的排版 */
+.note{max-width:40em}
+.note h1{font:700 1.45rem/1.3 var(--serif);margin:.9em 0 .3em}
+.note h2{font:700 1.2rem/1.45 var(--serif);margin:1.3em 0 .4em}
+.note h2 span{background:linear-gradient(transparent 62%,var(--hl-soft) 62%);padding:0 2px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.note h3{font:700 1.05rem/1.4 var(--serif);margin:1.1em 0 .3em}
+.note h4{font-size:1rem;margin:1em 0 .2em}
+.note p{margin:.5em 0}
+.note ul,.note ol{margin:.4em 0;padding-left:1.35em}
+.note li{margin:.2em 0}
+.note code{font-size:.92em;background:var(--sheet);border:1px solid var(--rule);border-radius:3px;padding:0 4px}
+.note blockquote{margin:.6em 0;padding:2px 0 2px 12px;border-left:3px solid var(--rule);color:var(--ink2)}
+.note hr{border:0;border-top:1px solid var(--rule);margin:1.2em 0}
+.tw{overflow-x:auto;margin:.7em 0}
+.note table{border-collapse:collapse;font-size:.92rem;min-width:100%}
+.note th,.note td{border-bottom:1px solid var(--rule);padding:6px 10px 6px 0;text-align:left;vertical-align:top}
+.note th{border-bottom:2px solid var(--ink);font-weight:700;white-space:nowrap}
+
+/* 相機 */
+#cam{position:fixed;inset:0;background:#000;color:#fff;z-index:20;display:flex;flex-direction:column}
+#camView{flex:1;position:relative;overflow:hidden;min-height:0}
+#camView video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transform-origin:center}
+#camFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+#camFlash.go{animation:fl .22s ease-out}
+@keyframes fl{from{opacity:.75}to{opacity:0}}
+.camtop{display:flex;justify-content:space-between;align-items:center;padding:calc(6px + env(safe-area-inset-top)) 14px 6px}
+.camtop button,.cambot .t{background:none;border:0;color:#fff;min-height:44px;padding:8px}
+#camCount{font-variant-numeric:tabular-nums}
+.camzoom{display:flex;align-items:center;gap:10px;padding:6px 20px;font-size:.85rem}
+.camzoom input{flex:1}
+.cambot{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:10px 18px calc(16px + env(safe-area-inset-bottom))}
+#camLast{grid-column:1;width:56px;height:56px;border-radius:4px;border:2px solid #fff;background:#222 center/cover;padding:0}
+#camShoot{grid-column:2;width:76px;height:76px;border-radius:50%;border:5px solid #fff;background:var(--hl);padding:0}
+#camShoot:active{transform:scale(.94)}
+.cambot .t{grid-column:3;justify-self:end}
+
+@media (orientation:landscape) and (max-height:560px){
+  #cam{display:grid;grid-template-columns:1fr 196px;grid-template-rows:auto 1fr auto}
+  #camView{grid-column:1;grid-row:1/4}
+  .camtop{grid-column:2;grid-row:1;flex-direction:column;align-items:stretch;padding:6px calc(8px + env(safe-area-inset-right)) 0 8px;text-align:center}
+  .camzoom{grid-column:2;grid-row:2;align-self:center;flex-wrap:wrap;justify-content:center;padding:6px 12px}
+  .camzoom input{flex-basis:100%}
+  .cambot{grid-column:2;grid-row:3;padding:6px calc(8px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) 8px}
+  #camShoot{width:64px;height:64px}
+  #camLast{width:44px;height:44px}
+  .cambot .t{white-space:nowrap;font-size:.85rem;padding:8px 0}
+  #camCount{font-size:.85rem}
+}
+dialog{border:0;border-radius:10px;background:var(--paper);color:var(--ink);padding:20px;width:min(92vw,520px);max-height:88vh}
+dialog::backdrop{background:rgba(8,12,20,.55)}
+dialog h2{font:700 1.25rem/1.3 var(--serif);margin:0 0 12px}
+dialog input[type=text],dialog input[type=password],dialog select{width:100%;background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;min-height:44px}
+dialog small{display:block;color:var(--ink2);margin-top:6px;line-height:1.5}
+dialog a{color:var(--pen)}
+.dlgrow{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:20px}
+.stack{display:grid;gap:8px}
+.stack .btn{text-align:left;white-space:normal}
+#toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:6px;font-size:.92rem;max-width:88vw;z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+@media (prefers-reduced-motion: reduce){#camFlash.go{animation:none}#toast{transition:none}}
+@media (min-width:700px){.stage{margin:0}.slides a{grid-template-columns:168px 1fr}}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <section id="v-home" class="view">
+    <header class="top"><h1>開會拍照速記</h1><button class="txt" id="btnSettings">設定</button></header>
+    <p class="lede">拍下投影片，補上手寫或打字的註記，會後交給 Gemini 整理成一份演講筆記。</p>
+    <div class="notice" id="keyWarn" hidden>還沒設定 Gemini API key，拍照與註記可以先做，辨識要等設定之後。<button class="txt" id="btnKeyGo">前往設定</button></div>
+    <ul class="sess" id="sessList"></ul>
+    <div class="empty" id="homeEmpty">還沒有場次。開一場，拍第一張投影片。</div>
+    <div class="bar"><div><button class="btn primary" id="btnNew">開始新場次</button></div></div>
+  </section>
+
+  <section id="v-sess" class="view">
+    <header class="top"><a class="txt" href="#/">‹ 所有場次</a><button class="txt" id="btnExport">匯出／刪除</button></header>
+    <div class="meta">
+      <input id="mTitle" placeholder="演講題目" autocomplete="off">
+      <div class="row2"><input id="mSpeaker" placeholder="講者" autocomplete="off"><input id="mEvent" placeholder="會議／場合" autocomplete="off"></div>
+    </div>
+    <nav class="tabs"><button data-tab="slides" class="on" id="tabSlides">投影片</button><button data-tab="sum">演講筆記</button></nav>
+
+    <div id="tab-slides">
+      <div class="batch" id="batchRow" hidden><span id="batchInfo"></span><button class="btn" id="btnAll">辨識全部</button></div>
+      <ol class="slides" id="slideList"></ol>
+      <div class="empty" id="slidesEmpty">這一場還沒有照片。按下方「拍照」開始，可以連續拍；「相簿」可一次加入多張，「手寫頁」是一張空白紙。</div>
+    </div>
+
+    <div id="tab-sum" hidden>
+      <div class="batch"><span id="sumInfo"></span><span><button class="btn" id="btnSumEdit" hidden>編輯</button> <button class="btn primary" id="btnSum">彙整演講筆記</button></span></div>
+      <div class="note" id="sumView"></div>
+      <textarea id="sumEdit" rows="24" hidden></textarea>
+      <div class="empty" id="sumEmpty">拍完之後按「彙整演講筆記」。還沒辨識的照片會先自動辨識，再依主題整理成一份筆記。</div>
+    </div>
+
+    <div class="bar"><div class="three">
+      <button class="btn" id="btnLib">相簿</button>
+      <button class="btn primary shoot" id="btnCam">拍照</button>
+      <button class="btn" id="btnBlank">手寫頁</button>
+    </div></div>
+  </section>
+
+  <section id="v-slide" class="view">
+    <header class="top"><a class="txt" id="dBack" href="#/">‹ 返回</a><span id="dPos"></span><button class="txt" id="dShoot">繼續拍</button></header>
+    <div class="stage" id="stage"><img id="dImg" alt="投影片照片"><canvas id="dInk"></canvas></div>
+    <div class="tools">
+      <button class="btn" id="tDraw">手寫</button>
+      <span class="drawset" id="drawSet" hidden>
+        <button class="sw" data-c="#E0312B" style="background:#E0312B" aria-label="紅色"></button>
+        <button class="sw" data-c="#1F4FBF" style="background:#1F4FBF" aria-label="藍色"></button>
+        <button class="sw" data-c="#111111" style="background:#111111" aria-label="黑色"></button>
+        <button class="sw" data-c="#FFD400" style="background:#FFD400" aria-label="黃色"></button>
+        <button class="btn" id="tWide">粗筆</button>
+        <button class="btn" id="tErase">橡皮擦</button>
+        <button class="btn" id="tUndo">復原</button>
+        <button class="btn" id="tClear">清除</button>
+      </span>
+    </div>
+    <label class="f" for="dText">打字註記</label>
+    <textarea id="dText" rows="3" placeholder="講者口頭補充、自己的想法、要追的文獻…"></textarea>
+
+    <div class="aihead"><span id="dStatus"></span><button class="btn" id="dEditAi" hidden>編輯</button></div>
+    <div class="note" id="dAi"></div>
+    <textarea id="dAiEdit" rows="14" hidden></textarea>
+
+    <div class="foot">
+      <button class="btn" id="dUp">往前移</button><button class="btn" id="dDown">往後移</button><button class="btn danger" id="dDel">刪除這張</button>
+    </div>
+    <div class="bar"><div class="three">
+      <button class="btn" id="dPrev">‹ 上一張</button>
+      <button class="btn primary" id="dAiBtn">AI 辨識</button>
+      <button class="btn" id="dNext">下一張 ›</button>
+    </div></div>
+  </section>
+</div>
+
+<div id="cam" hidden>
+  <div class="camtop"><button id="camClose">完成</button><span id="camCount"></span><button id="camNative">改用系統相機</button></div>
+  <div id="camView"><video id="camVideo" playsinline muted autoplay></video><div id="camFlash"></div></div>
+  <div class="camzoom"><span>變焦</span><input type="range" id="camZoom" min="1" max="4" step="0.1" value="1" aria-label="變焦"><span id="camZoomVal">1×</span></div>
+  <div class="cambot"><button id="camLast" aria-label="打開剛拍的那張做註記" hidden></button>
+    <button id="camShoot" aria-label="拍照"></button><button class="t" id="camNote" hidden>寫註記</button></div>
+</div>
+
+<dialog id="dlgSettings">
+  <h2>設定</h2>
+  <label class="f" for="cKey">Gemini API key</label>
+  <input type="password" id="cKey" autocomplete="off" spellcheck="false">
+  <small>只存在這台裝置的瀏覽器裡，不會寫進 GitHub。到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 建立；Gemini 3.1 Pro 的 API 沒有免費額度，專案要先開啟計費。</small>
+  <label class="f" for="cModel">Model ID</label>
+  <input type="text" id="cModel" autocomplete="off" spellcheck="false">
+  <small>預設 gemini-3.1-pro-preview。Google 改版時在這裡換掉即可。</small>
+  <div class="row2">
+    <div><label class="f" for="cLvSlide">單張辨識的思考深度</label><select id="cLvSlide"><option value="low">low（快）</option><option value="medium">medium</option><option value="high">high（慢）</option></select></div>
+    <div><label class="f" for="cLvSum">彙整筆記的思考深度</label><select id="cLvSum"><option value="low">low（快）</option><option value="medium">medium</option><option value="high">high（慢）</option></select></div>
+  </div>
+  <label class="f" for="cExtra">彙整時的額外要求（選填）</label>
+  <textarea id="cExtra" rows="3" placeholder="例如：最後加一段「對本科臨床的影響」；表格優先。"></textarea>
+  <small id="cStore"></small>
+  <div class="dlgrow"><button class="btn" id="cTest">測試連線</button><button class="btn" id="cCancel">取消</button><button class="btn primary" id="cSave">儲存設定</button></div>
+</dialog>
+
+<dialog id="dlgExport">
+  <h2>匯出這一場</h2>
+  <div class="stack">
+    <button class="btn" id="xCopy">複製筆記（Markdown）</button>
+    <button class="btn" id="xMd">下載筆記 .md</button>
+    <button class="btn" id="xHtml">下載離線 HTML（含照片與手寫）</button>
+    <button class="btn danger" id="xDel">刪除這一場</button>
+  </div>
+  <div class="dlgrow"><button class="btn" id="xClose">關閉</button></div>
+</dialog>
+
+<input type="file" id="fNative" accept="image/*" capture="environment" hidden>
+<input type="file" id="fLib" accept="image/*" multiple hidden>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const fmtDate = t => { const d = new Date(t), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+let toastT;
+function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
+
+/* ---------- 設定 ---------- */
+const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', extra: '' };
+let cfg = { ...CFG_DEFAULT };
+try { Object.assign(cfg, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {}
+function saveCfg() { try { localStorage.setItem('snapnote.cfg', JSON.stringify(cfg)); } catch (e) { toast('這個瀏覽器不允許儲存設定（可能是無痕模式）'); } }
+
+/* ---------- IndexedDB：sessions / slides（含縮圖、筆跡、筆記）/ images（原圖） ---------- */
+const idb = {
+  p: null,
+  open() {
+    return this.p ||= new Promise((res, rej) => {
+      const r = indexedDB.open('snapnote', 1);
+      r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('sessions', { keyPath: 'id' }); d.createObjectStore('slides', { keyPath: 'id' }).createIndex('sid', 'sid'); d.createObjectStore('images'); };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  },
+  async run(store, mode, fn) {
+    const d = await this.open();
+    return new Promise((res, rej) => {
+      const t = d.transaction(store, mode); const r = fn(t.objectStore(store));
+      t.oncomplete = () => res(r ? r.result : undefined);
+      t.onerror = t.onabort = () => rej(t.error || new Error('儲存失敗'));
+    });
+  },
+  get: (s, k) => idb.run(s, 'readonly', o => o.get(k)),
+  all: s => idb.run(s, 'readonly', o => o.getAll()),
+  put: (s, v, k) => idb.run(s, 'readwrite', o => k === undefined ? o.put(v) : o.put(v, k)),
+  del: (s, k) => idb.run(s, 'readwrite', o => o.delete(k)),
+  bySid: sid => idb.run('slides', 'readonly', o => o.index('sid').getAll(sid)),
+};
+
+/* ---------- 狀態 ---------- */
+let cur = null;            // 目前場次
+let slides = [];           // 目前場次的投影片（依 order）
+let curSlide = null;       // 單張頁面顯示中的那張
+let tab = 'slides';
+const busy = new Set();    // 辨識中的 slide id
+const urls = new Map();    // slide id -> object URL
+let sessScroll = 0;
+
+async function imgBlob(id) { return new Blob([await idb.get('images', id)], { type: 'image/jpeg' }); }
+async function imgURL(id) { if (!urls.has(id)) urls.set(id, URL.createObjectURL(await imgBlob(id))); return urls.get(id); }
+function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('圖片無法讀取')); i.src = src; }); }
+const saveSlide = s => idb.put('slides', s);
+async function saveSession() { cur.n = slides.length; cur.updatedAt = Date.now(); await idb.put('sessions', cur); }
+
+/* ---------- 影像：縮到長邊 2400px 存 JPEG ---------- */
+async function encode(src, sx, sy, sw, sh) {
+  const k = Math.min(1, 2400 / Math.max(sw, sh)), w = Math.round(sw * k), h = Math.round(sh * k);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.88));
+  return { buf: await blob.arrayBuffer(), thumb: makeThumb(c, w, h, []), w, h };
+}
+function makeThumb(src, w, h, ink) {
+  const tw = 320, th = Math.round(h * tw / w), c = document.createElement('canvas'); c.width = tw; c.height = th;
+  const x = c.getContext('2d'); x.drawImage(src, 0, 0, tw, th); drawInk(x, ink, tw, th);
+  return c.toDataURL('image/jpeg', 0.7);
+}
+async function addSlide(src, sx, sy, sw, sh, kind = 'photo') {
+  const e = await encode(src, sx, sy, sw, sh);
+  const s = { id: uid(), sid: cur.id, order: (slides.length ? slides[slides.length - 1].order : 0) + 1, kind, w: e.w, h: e.h, thumb: e.thumb, ink: [], text: '', ai: '', aiAt: 0, dirty: false, err: '', at: Date.now() };
+  try { await idb.put('images', e.buf, s.id); await saveSlide(s); }
+  catch (err) { toast('存不進去：裝置的瀏覽器儲存空間可能滿了'); throw err; }
+  slides.push(s); await saveSession();
+  if (slides.length === 1 && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  return s;
+}
+async function addFiles(files) {
+  let last = null;
+  for (const f of files) {
+    const u = URL.createObjectURL(f);
+    try { const im = await loadImg(u); last = await addSlide(im, 0, 0, im.naturalWidth, im.naturalHeight); }
+    catch (e) { toast('有一張照片讀不出來，已略過'); }
+    URL.revokeObjectURL(u);
+  }
+  return last;
+}
+
+/* ---------- 筆跡：座標以圖片寬高正規化 (0–1) ---------- */
+function drawInk(x, ink, w, h) {
+  x.lineCap = x.lineJoin = 'round';
+  for (const st of ink || []) {
+    const p = st.p; if (!p.length) continue;
+    x.strokeStyle = st.c; x.lineWidth = Math.max(1, st.w * w); x.beginPath(); x.moveTo(p[0][0] * w, p[0][1] * h);
+    if (p.length === 1) x.lineTo(p[0][0] * w + 0.01, p[0][1] * h);
+    for (let i = 1; i < p.length - 1; i++) { const mx = (p[i][0] + p[i + 1][0]) / 2 * w, my = (p[i][1] + p[i + 1][1]) / 2 * h; x.quadraticCurveTo(p[i][0] * w, p[i][1] * h, mx, my); }
+    if (p.length > 1) x.lineTo(p[p.length - 1][0] * w, p[p.length - 1][1] * h);
+    x.stroke();
+  }
+}
+const pen = { on: false, color: '#E0312B', wide: false, erase: false, stroke: null, sawPen: false };
+const inkC = $('#dInk'), stage = $('#stage'), dImg = $('#dImg');
+function sizeInk() { const r = dImg.getBoundingClientRect(), d = window.devicePixelRatio || 1; if (!r.width) return; inkC.width = Math.round(r.width * d); inkC.height = Math.round(r.height * d); paintInk(); }
+function paintInk() { const x = inkC.getContext('2d'); x.clearRect(0, 0, inkC.width, inkC.height); if (curSlide) drawInk(x, pen.stroke ? [...curSlide.ink, pen.stroke] : curSlide.ink, inkC.width, inkC.height); }
+function pt(e) { const r = inkC.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; }
+function eraseAt(e) {
+  const r = inkC.getBoundingClientRect(), [px, py] = pt(e), rad = 18, n = curSlide.ink.length;
+  curSlide.ink = curSlide.ink.filter(st => !st.p.some(q => Math.hypot((q[0] - px) * r.width, (q[1] - py) * r.height) < rad));
+  if (curSlide.ink.length !== n) { pen.changed = true; paintInk(); }
+}
+inkC.addEventListener('pointerdown', e => {
+  if (!pen.on || !curSlide) return;
+  if (e.pointerType === 'pen') pen.sawPen = true;
+  if (e.pointerType === 'touch' && pen.sawPen) return;   // 用觸控筆時忽略手掌
+  e.preventDefault(); inkC.setPointerCapture(e.pointerId); pen.active = e.pointerId;
+  if (pen.erase) { eraseAt(e); return; }
+  pen.stroke = { c: pen.color, w: pen.wide ? 0.014 : 0.0045, p: [pt(e)] }; paintInk();
+});
+inkC.addEventListener('pointermove', e => {
+  if (pen.active !== e.pointerId) return;
+  if (pen.erase) { eraseAt(e); return; }
+  if (!pen.stroke) return;
+  for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) pen.stroke.p.push(pt(ev));
+  paintInk();
+});
+function endStroke(e) {
+  if (pen.active !== e.pointerId) return; pen.active = null;
+  if (pen.stroke) { curSlide.ink.push(pen.stroke); pen.stroke = null; pen.changed = true; }
+  if (pen.changed) { pen.changed = false; inkChanged(); }
+}
+inkC.addEventListener('pointerup', endStroke); inkC.addEventListener('pointercancel', endStroke);
+function inkChanged() {
+  const s = curSlide; paintInk();
+  if (dImg.naturalWidth) s.thumb = makeThumb(dImg, s.w, s.h, s.ink);
+  if (s.ai) s.dirty = true;
+  saveSlide(s); paintStatus(s);
+}
+function setDraw(on) {
+  pen.on = on; stage.classList.toggle('draw', on); $('#tDraw').classList.toggle('on', on); $('#drawSet').hidden = !on;
+  $('#tDraw').textContent = on ? '手寫中（點此結束）' : '手寫';
+  $$('.sw').forEach(b => b.classList.toggle('on', !pen.erase && b.dataset.c === pen.color));
+  $('#tWide').classList.toggle('on', pen.wide); $('#tErase').classList.toggle('on', pen.erase);
+}
+$('#tDraw').onclick = () => setDraw(!pen.on);
+$$('.sw').forEach(b => b.onclick = () => { pen.color = b.dataset.c; pen.erase = false; setDraw(true); });
+$('#tWide').onclick = () => { pen.wide = !pen.wide; setDraw(true); };
+$('#tErase').onclick = () => { pen.erase = !pen.erase; setDraw(true); };
+$('#tUndo').onclick = () => { if (curSlide.ink.pop()) inkChanged(); };
+$('#tClear').onclick = () => { if (curSlide.ink.length && confirm('清除這張的所有手寫？')) { curSlide.ink = []; inkChanged(); } };
+if (window.ResizeObserver) new ResizeObserver(sizeInk).observe(dImg); else addEventListener('resize', sizeInk);
+dImg.addEventListener('load', sizeInk);
+
+/* ---------- 簡易 Markdown 轉 HTML（標題、清單、表格、粗體、引用） ---------- */
+function md(src) {
+  const inl = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, '$1<em>$2</em>');
+  const L = String(src || '').replace(/\r/g, '').split('\n'), out = []; let i = 0, m;
+  const isList = l => /^\s*([-*+]|\d+[.)])\s+/.test(l), isRow = l => /^\s*\|.*\|\s*$/.test(l);
+  const cells = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+  while (i < L.length) {
+    const l = L[i];
+    if (!l.trim()) { i++; continue; }
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { const n = m[1].length; out.push(n === 2 ? `<h2><span>${inl(m[2])}</span></h2>` : `<h${n}>${inl(m[2])}</h${n}>`); i++; continue; }
+    if (/^\s*([-*_])\1{2,}\s*$/.test(l)) { out.push('<hr>'); i++; continue; }
+    if (isRow(l) && i + 1 < L.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(L[i + 1])) {
+      let h = '<div class="tw"><table><thead><tr>' + cells(l).map(c => `<th>${inl(c)}</th>`).join('') + '</tr></thead><tbody>'; i += 2;
+      while (i < L.length && isRow(L[i])) { h += '<tr>' + cells(L[i]).map(c => `<td>${inl(c)}</td>`).join('') + '</tr>'; i++; }
+      out.push(h + '</tbody></table></div>'); continue;
+    }
+    if (isList(l)) {
+      let h = ''; const st = [];
+      while (i < L.length && (m = L[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)/))) {
+        const d = m[1].replace(/\t/g, '  ').length, tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+        while (st.length && d < st[st.length - 1].d) h += '</li></' + st.pop().tag + '>';
+        if (st.length && d === st[st.length - 1].d && tag !== st[st.length - 1].tag) h += '</li></' + st.pop().tag + '>';
+        if (!st.length || d > st[st.length - 1].d || d < st[st.length - 1].d) { h += '<' + tag + '>'; st.push({ d, tag }); } else h += '</li>';
+        h += '<li>' + inl(m[3]); i++;
+      }
+      while (st.length) h += '</li></' + st.pop().tag + '>';
+      out.push(h); continue;
+    }
+    if (/^>\s?/.test(l)) { const b = []; while (i < L.length && /^>\s?/.test(L[i])) b.push(L[i++].replace(/^>\s?/, '')); out.push('<blockquote>' + b.map(inl).join('<br>') + '</blockquote>'); continue; }
+    const p = [];
+    while (i < L.length && L[i].trim() && !/^#{1,4}\s/.test(L[i]) && !isList(L[i]) && !isRow(L[i]) && !/^>\s?/.test(L[i])) p.push(L[i++]);
+    if (p.length) out.push('<p>' + p.map(inl).join('<br>') + '</p>'); else i++;
+  }
+  return out.join('\n');
+}
+
+/* ---------- Gemini ---------- */
+const SYS_SLIDE = `你是協助醫師在學術會議中做筆記的助理。使用者會給你一張會議投影片的照片（可能歪斜、反光、被前排遮住一部分），有時還有他當下的手寫或打字註記。請寫出這一張投影片的筆記。
+
+規則：
+- 用繁體中文撰寫；英文專有名詞、藥名、試驗名稱、統計量與縮寫保留原文，不要翻譯。
+- 只寫投影片上看得到的內容，不要補充投影片沒有的知識。看不清楚的字寫〔不清楚〕，絕對不要猜數字。
+- 數值（HR、CI、p 值、n、百分比、劑量、追蹤時間）逐字照抄。
+- 投影片上的表格用 Markdown 表格重建。圖（Kaplan-Meier curve、forest plot、流程圖等）用一兩句話說明它呈現什麼，並寫出圖上讀得到的數值。
+- 投影片上的 reference／citation 照錄。
+- 如果有第二張影像，它是同一張照片加上使用者的手繪筆跡：辨識手寫的字，並說明圈起或標示了哪個部分。
+- 使用者的手寫與打字註記是他自己的想法，一律放在最後的「我的註記」，照原意整理，不要混進投影片內容。沒有註記就省略這一節。
+- 如果照片不是投影片（例如空白手寫頁、海報、講義），就把上面的內容整理成筆記，標題自行擬定。
+
+輸出格式（Markdown），不要前言或結語：
+## 投影片標題
+- 重點條列
+（需要時加表格或圖的說明）
+**出處**：…
+**我的註記**：…`;
+
+const SYS_SUM = `你是協助醫師整理學術演講筆記的助理。以下是同一場演講逐張投影片的筆記，依拍攝順序編號為 S1、S2…。其中「我的註記」與〔聽講者打字註記〕是聽講者本人的想法，不是講者的內容。請彙整成一份日後可以查閱的演講筆記。
+
+規則：
+- 用繁體中文撰寫；英文專有名詞、藥名、試驗名稱、統計量與縮寫保留原文。
+- 只根據提供的內容，不要加入外部知識或自行推算的數據。逐張筆記中標〔不清楚〕的地方不要自行補齊，列進「待查證」。
+- 如實呈現：分清楚講者引用的證據（試驗結果、文獻）與講者個人的意見或經驗；不要把結論寫得比投影片上更強。
+- 依主題重新組織，不必照投影片順序，重複的內容合併。每個要點後面用（S3）這樣的方式標出來源投影片。
+- 數據優先用表格呈現。
+
+輸出格式（Markdown），沒有內容的章節直接省略，不要前言或結語：
+# 演講題目
+講者｜會議｜日期
+## 重點摘要
+3–5 點 take-home message
+## 內容整理
+### 依主題分節
+## 關鍵數據
+表格：研究或來源｜族群｜比較｜結果｜投影片
+## 講者的結論
+## 我的註記與待辦
+## 待查證
+## 提及的文獻`;
+
+const isG3 = () => /^gemini-3/.test(cfg.model);
+function haveKey() { if (cfg.key) return true; toast('請先設定 Gemini API key'); openSettings(); return false; }
+async function gemini({ system, parts, level }) {
+  const body = { contents: [{ role: 'user', parts }] };
+  if (system) body.systemInstruction = { parts: [{ text: system }] };
+  if (isG3()) body.generationConfig = { thinkingConfig: { thinkingLevel: level } };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`;
+  let lastErr;
+  for (let a = 0; a < 3; a++) {
+    if (a) await sleep(2500 * a * a);
+    let r;
+    try { r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.key }, body: JSON.stringify(body) }); }
+    catch (e) { lastErr = new Error('連不上 Gemini：沒有網路，或這個網路擋了 Google API'); continue; }
+    let j = null; try { j = await r.json(); } catch (e) {}
+    if (!r.ok) {
+      const msg = (j && j.error && j.error.message) || ('HTTP ' + r.status);
+      if (r.status === 429 || r.status >= 500) { lastErr = new Error(r.status === 429 ? '超過用量或額度上限（429），稍後再試' : 'Gemini 暫時忙線（' + r.status + '）'); continue; }
+      if (/API key/i.test(msg) || r.status === 401 || r.status === 403) throw new Error('API key 無效或沒有權限：' + msg);
+      if (r.status === 404) throw new Error('找不到模型「' + cfg.model + '」，請到設定確認 Model ID');
+      throw new Error(msg);
+    }
+    const c = j && j.candidates && j.candidates[0];
+    const text = c && c.content && c.content.parts ? c.content.parts.filter(p => !p.thought && p.text).map(p => p.text).join('') : '';
+    if (text.trim()) return text.trim();
+    const why = (j && j.promptFeedback && j.promptFeedback.blockReason) || (c && c.finishReason) || '沒有內容';
+    throw new Error('Gemini 沒有回傳文字（' + why + '）');
+  }
+  throw lastErr;
+}
+function b64(blob) { return new Promise((res, rej) => { const f = new FileReader(); f.onload = () => res(String(f.result).split(',')[1]); f.onerror = () => rej(f.error); f.readAsDataURL(blob); }); }
+async function composite(s, max = 2400, q = 0.88) {   // 照片 + 手寫合成一張
+  const im = await loadImg(await imgURL(s.id)), k = Math.min(1, max / Math.max(s.w, s.h)), w = Math.round(s.w * k), h = Math.round(s.h * k);
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  x.drawImage(im, 0, 0, w, h); drawInk(x, s.ink, w, h); return c.toDataURL('image/jpeg', q);
+}
+async function recognize(s) {
+  if (busy.has(s.id)) return;
+  busy.add(s.id); s.err = ''; paintStatus(s);
+  try {
+    const imgs = [];
+    if (s.kind !== 'blank') imgs.push(await b64(await imgBlob(s.id)));
+    if (s.ink.length || s.kind === 'blank') imgs.push((await composite(s)).split(',')[1]);
+    const parts = imgs.map(d => { const p = { inlineData: { mimeType: 'image/jpeg', data: d } }; if (isG3()) p.mediaResolution = { level: 'media_resolution_high' }; return p; });
+    parts.push({ text: `這是本場第 ${slides.indexOf(s) + 1} 張。` + (s.kind === 'blank' ? '這是一張空白手寫頁，內容全部是聽講者的手寫筆記。' : s.ink.length ? '第二張影像是加上手繪筆跡的同一張照片。' : '') + (s.text.trim() ? `\n\n聽講者的打字註記：\n${s.text.trim()}` : '') + '\n\n請依規則寫出這一張的筆記。' });
+    s.ai = await gemini({ system: SYS_SLIDE, parts, level: cfg.lvSlide });
+    s.aiAt = Date.now(); s.dirty = false;
+  } catch (e) { s.err = e.message || String(e); }
+  busy.delete(s.id);
+  await saveSlide(s); paintStatus(s);
+}
+async function recognizeAll(list) {
+  let i = 0, done = 0; const n = list.length;
+  $('#btnAll').disabled = true;
+  const info = () => { $('#batchInfo').textContent = `辨識中 ${done}/${n}…`; $('#sumInfo').textContent = `先辨識照片 ${done}/${n}…`; };
+  info();
+  const worker = async () => { while (i < list.length) { const s = list[i++]; await recognize(s); done++; info(); } };
+  await Promise.all([worker(), worker()]);
+  $('#btnAll').disabled = false; renderSlides(); renderSum();
+}
+async function summarize() {
+  if (!slides.length) { toast('這一場還沒有照片'); return; }
+  if (!haveKey()) return;
+  const btn = $('#btnSum'); btn.disabled = true;
+  try {
+    const todo = slides.filter(s => !s.ai);
+    if (todo.length) await recognizeAll(todo);
+    const usable = slides.filter(s => s.ai || s.text.trim());
+    if (!usable.length) throw new Error('沒有任何一張辨識成功：' + (slides.find(s => s.err) || {}).err);
+    $('#sumInfo').textContent = '彙整中，通常要半分鐘到一分鐘…';
+    const failed = slides.filter(s => !s.ai).length;
+    let t = `演講題目：${cur.title || '（未填）'}\n講者：${cur.speaker || '（未填）'}\n會議：${cur.event || '（未填）'}\n日期：${fmtDate(cur.createdAt).slice(0, 10)}\n投影片張數：${slides.length}\n`;
+    slides.forEach((s, i) => { t += `\n===== S${i + 1} =====\n${s.ai || '（這張沒有辨識結果）'}\n`; if (s.text.trim()) t += `〔聽講者打字註記〕${s.text.trim()}\n`; });
+    t += '\n以上是全部投影片的筆記。請依規則彙整成一份演講筆記。' + (cfg.extra.trim() ? '\n\n聽講者的額外要求：' + cfg.extra.trim() : '');
+    cur.summary = await gemini({ system: SYS_SUM, parts: [{ text: t }], level: cfg.lvSum });
+    cur.summaryAt = Date.now(); cur.summaryN = slides.length; await saveSession();
+    if (failed) toast(`有 ${failed} 張沒辨識成功，未納入彙整`, 4500);
+  } catch (e) { toast(e.message || String(e), 5000); }
+  btn.disabled = false; renderSum();
+}
+
+/* ---------- 畫面 ---------- */
+function show(id) { $$('.view').forEach(v => v.classList.toggle('on', v.id === id)); }
+function slideTitle(s) { const m = (s.ai || '').match(/^#{1,4}\s+(.+)$/m); return m ? m[1].replace(/\*\*/g, '') : (s.kind === 'blank' ? '手寫頁' : '尚未辨識'); }
+function statusOf(s) {
+  if (busy.has(s.id)) return ['busy', 'AI 辨識中…'];
+  if (s.err) return ['err', '辨識失敗：' + s.err];
+  if (!s.ai) return ['', ''];
+  if (s.dirty) return ['', '註記有更新，重新辨識才會納入'];
+  return ['', ''];
+}
+function rowInner(s, i) {
+  const [cls, st] = statusOf(s);
+  const body = s.ai ? s.ai.replace(/^#{1,4}\s+.+$/m, '').replace(/[*#|>`-]/g, ' ').replace(/\s+/g, ' ').trim() : s.text;
+  return `<div class="thumb"><img src="${s.thumb}" alt=""><i>${i + 1}</i></div><div><h3>${esc(slideTitle(s))}</h3><p>${esc(body)}</p>${st ? `<div class="st ${cls}">${esc(st)}</div>` : ''}</div>`;
+}
+function renderSlides() {
+  $('#slideList').innerHTML = slides.map((s, i) => `<li><a href="#/s/${cur.id}/${s.id}" data-id="${s.id}">${rowInner(s, i)}</a></li>`).join('');
+  $('#slidesEmpty').hidden = slides.length > 0;
+  $('#tabSlides').textContent = slides.length ? `投影片 ${slides.length}` : '投影片';
+  const todo = slides.filter(s => !s.ai).length;
+  $('#batchRow').hidden = !slides.length;
+  if (!$('#btnAll').disabled) $('#batchInfo').textContent = todo ? `${todo} 張尚未辨識` : '全部已辨識';
+  $('#btnAll').textContent = todo ? `辨識全部（${todo}）` : '全部重新辨識';
+}
+function paintStatus(s) {
+  const a = $(`#slideList a[data-id="${s.id}"]`); if (a) a.innerHTML = rowInner(s, slides.indexOf(s));
+  if (curSlide === s && $('#v-slide').classList.contains('on')) renderDetailAi();
+}
+function renderSum() {
+  const has = !!(cur && cur.summary), editing = !$('#sumEdit').hidden;
+  $('#sumEmpty').hidden = has; $('#btnSumEdit').hidden = !has;
+  $('#btnSum').textContent = has ? '重新彙整' : '彙整演講筆記';
+  if (!editing) $('#sumView').innerHTML = has ? md(cur.summary) : '';
+  if ($('#btnSum').disabled) return;
+  $('#sumInfo').textContent = has ? `${fmtDate(cur.summaryAt)} 彙整` + (cur.summaryN !== slides.length ? `（當時 ${cur.summaryN} 張，現在 ${slides.length} 張）` : '') : '';
+}
+function setTab(t) { tab = t; $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); $('#tab-slides').hidden = t !== 'slides'; $('#tab-sum').hidden = t !== 'sum'; }
+$$('.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+
+async function showHome() {
+  cur = null; slides = []; curSlide = null; urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
+  const list = (await idb.all('sessions')).sort((a, b) => b.createdAt - a.createdAt);
+  $('#sessList').innerHTML = list.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.title || '未命名場次')}</b><span>${esc([fmtDate(s.createdAt), s.speaker, s.event, (s.n || 0) + ' 張', s.summary ? '已彙整' : ''].filter(Boolean).join('　'))}</span></a></li>`).join('');
+  $('#homeEmpty').hidden = list.length > 0; $('#sessList').hidden = !list.length;
+  $('#keyWarn').hidden = !!cfg.key;
+  show('v-home'); scrollTo(0, 0);
+}
+async function loadSession(s) {
+  cur = s; slides = (await idb.bySid(s.id)).sort((a, b) => a.order - b.order);
+  $('#mTitle').value = s.title || ''; $('#mSpeaker').value = s.speaker || ''; $('#mEvent').value = s.event || '';
+  $('#sumEdit').hidden = true; $('#sumView').hidden = false; $('#btnSumEdit').textContent = '編輯';
+  setTab('slides'); sessScroll = 0;
+}
+function showSession() { curSlide = null; setDraw(false); renderSlides(); renderSum(); show('v-sess'); scrollTo(0, sessScroll); }
+async function showSlide(s) {
+  if ($('#v-sess').classList.contains('on')) sessScroll = scrollY;
+  curSlide = s; pen.stroke = null;
+  const i = slides.indexOf(s);
+  $('#dBack').href = '#/s/' + cur.id; $('#dPos').textContent = `第 ${i + 1} 張／共 ${slides.length} 張`;
+  $('#dText').value = s.text; $('#dPrev').disabled = i === 0; $('#dNext').disabled = i === slides.length - 1;
+  $('#dUp').disabled = i === 0; $('#dDown').disabled = i === slides.length - 1;
+  $('#dAiEdit').hidden = true; $('#dAi').hidden = false; $('#dEditAi').textContent = '編輯';
+  dImg.src = await imgURL(s.id);
+  setDraw(s.kind === 'blank' && !s.ai);
+  renderDetailAi(); show('v-slide'); scrollTo(0, 0);
+}
+function renderDetailAi() {
+  const s = curSlide, [cls, st] = statusOf(s), b = busy.has(s.id);
+  $('#dStatus').textContent = st || (s.ai ? 'AI 筆記　' + fmtDate(s.aiAt) : '還沒辨識。可以先寫註記，辨識時會一起整理。');
+  $('#dStatus').className = cls === 'err' ? 'st err' : cls === 'busy' ? 'st busy' : '';
+  $('#dAiBtn').disabled = b; $('#dAiBtn').textContent = b ? '辨識中…' : s.ai ? '重新辨識' : 'AI 辨識';
+  $('#dEditAi').hidden = !s.ai;
+  if ($('#dAiEdit').hidden) $('#dAi').innerHTML = md(s.ai);
+}
+async function route() {
+  const m = location.hash.match(/^#\/s\/([^/]+)(?:\/([^/]+))?/);
+  if (!m) return showHome();
+  if (!cur || cur.id !== m[1]) { const s = await idb.get('sessions', m[1]); if (!s) { location.hash = '#/'; return; } await loadSession(s); }
+  if (m[2]) { const s = slides.find(x => x.id === m[2]); if (!s) { location.replace('#/s/' + cur.id); return; } return showSlide(s); }
+  showSession();
+}
+addEventListener('hashchange', route);
+
+/* ---------- 場次操作 ---------- */
+$('#btnNew').onclick = async () => { const s = { id: uid(), title: '', speaker: '', event: '', createdAt: Date.now(), updatedAt: Date.now(), n: 0, summary: '' }; await idb.put('sessions', s); location.hash = '#/s/' + s.id; };
+let metaT; const metaSave = () => { cur.title = $('#mTitle').value.trim(); cur.speaker = $('#mSpeaker').value.trim(); cur.event = $('#mEvent').value.trim(); clearTimeout(metaT); metaT = setTimeout(saveSession, 400); };
+['mTitle', 'mSpeaker', 'mEvent'].forEach(id => $('#' + id).oninput = metaSave);
+$('#btnAll').onclick = async () => { if (!haveKey()) return; const todo = slides.filter(s => !s.ai); if (!todo.length && !confirm(`重新辨識全部 ${slides.length} 張？原本的 AI 筆記（含手動修改）會被覆蓋。`)) return; await recognizeAll(todo.length ? todo : slides); };
+$('#btnSum').onclick = () => { if (cur.summary && !confirm('重新彙整會覆蓋目前的演講筆記（含手動修改）。繼續？')) return; $('#sumEdit').hidden = true; $('#sumView').hidden = false; $('#btnSumEdit').textContent = '編輯'; summarize(); };
+$('#btnSumEdit').onclick = async () => {
+  const ed = $('#sumEdit');
+  if (ed.hidden) { ed.value = cur.summary; ed.hidden = false; $('#sumView').hidden = true; $('#btnSumEdit').textContent = '完成編輯'; }
+  else { cur.summary = ed.value; await saveSession(); ed.hidden = true; $('#sumView').hidden = false; $('#btnSumEdit').textContent = '編輯'; renderSum(); }
+};
+$('#btnLib').onclick = () => $('#fLib').click();
+$('#fLib').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; toast(`加入 ${f.length} 張…`); await addFiles(f); renderSlides(); renderSum(); };
+$('#fNative').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; const s = await addFiles(f); renderSlides(); if (s) toast(`已存為第 ${slides.length} 張`); };
+$('#btnBlank').onclick = async () => { const c = document.createElement('canvas'); c.width = 1600; c.height = 1200; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 1600, 1200); const s = await addSlide(c, 0, 0, 1600, 1200, 'blank'); pen.color = '#111111'; pen.erase = false; location.hash = `#/s/${cur.id}/${s.id}`; };
+
+/* ---------- 單張操作 ---------- */
+let textT; $('#dText').oninput = () => { const s = curSlide; s.text = $('#dText').value; if (s.ai && !s.dirty) { s.dirty = true; renderDetailAi(); } clearTimeout(textT); textT = setTimeout(() => saveSlide(s), 400); };
+$('#dAiBtn').onclick = () => { if (!haveKey()) return; const s = curSlide; if (!$('#dAiEdit').hidden) $('#dEditAi').click(); recognize(s); };
+$('#dEditAi').onclick = async () => {
+  const ed = $('#dAiEdit'), s = curSlide;
+  if (ed.hidden) { ed.value = s.ai; ed.hidden = false; $('#dAi').hidden = true; $('#dEditAi').textContent = '完成編輯'; }
+  else { s.ai = ed.value; await saveSlide(s); ed.hidden = true; $('#dAi').hidden = false; $('#dEditAi').textContent = '編輯'; renderDetailAi(); }
+};
+const go = d => { const s = slides[slides.indexOf(curSlide) + d]; if (s) location.replace(`#/s/${cur.id}/${s.id}`); };
+$('#dPrev').onclick = () => go(-1); $('#dNext').onclick = () => go(1);
+async function move(d) { const i = slides.indexOf(curSlide), j = i + d; if (j < 0 || j >= slides.length) return; const a = slides[i], b = slides[j]; [a.order, b.order] = [b.order, a.order]; slides[i] = b; slides[j] = a; await saveSlide(a); await saveSlide(b); showSlide(a); }
+$('#dUp').onclick = () => move(-1); $('#dDown').onclick = () => move(1);
+$('#dDel').onclick = async () => {
+  if (!confirm('刪除這張照片和它的註記？')) return;
+  const s = curSlide, i = slides.indexOf(s); slides.splice(i, 1);
+  await idb.del('slides', s.id); await idb.del('images', s.id); await saveSession();
+  if (urls.has(s.id)) { URL.revokeObjectURL(urls.get(s.id)); urls.delete(s.id); }
+  const n = slides[i] || slides[i - 1]; location.replace(n ? `#/s/${cur.id}/${n.id}` : `#/s/${cur.id}`);
+};
+$('#dShoot').onclick = () => { location.hash = '#/s/' + cur.id; openCam(); };
+
+/* ---------- 相機（連拍） ---------- */
+const cam = { stream: null, track: null, hw: null, zoom: 1, last: null, n: 0 }, video = $('#camVideo');
+async function openCam() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('#fNative').click(); return; }
+  try { cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } } }); }
+  catch (e) { toast(e.name === 'NotAllowedError' ? '相機權限被拒絕，改用系統相機' : '開不了相機，改用系統相機'); $('#fNative').click(); return; }
+  video.srcObject = cam.stream; cam.track = cam.stream.getVideoTracks()[0];
+  try { await video.play(); } catch (e) {}
+  const caps = cam.track.getCapabilities ? cam.track.getCapabilities() : {}, z = $('#camZoom');
+  cam.hw = caps.zoom && caps.zoom.max > caps.zoom.min ? caps.zoom : null;
+  z.min = cam.hw ? cam.hw.min : 1; z.max = cam.hw ? Math.min(cam.hw.max, 10) : 4; z.value = z.min; setZoom(+z.min);
+  cam.n = 0; cam.last = null; $('#camLast').hidden = true; $('#camNote').hidden = true; camCount();
+  $('#cam').hidden = false;
+}
+function camCount() { $('#camCount').textContent = `本場共 ${slides.length} 張` + (cam.n ? `（這次 ${cam.n}）` : ''); }
+function setZoom(v) { cam.zoom = v; $('#camZoomVal').textContent = (+v).toFixed(1) + '×'; if (cam.hw) { cam.track.applyConstraints({ advanced: [{ zoom: v }] }).catch(() => {}); video.style.transform = ''; } else video.style.transform = `scale(${v})`; }
+$('#camZoom').oninput = e => setZoom(+e.target.value);
+function closeCam() { if (cam.stream) cam.stream.getTracks().forEach(t => t.stop()); cam.stream = null; video.srcObject = null; $('#cam').hidden = true; renderSlides(); renderSum(); }
+$('#camShoot').onclick = async () => {
+  const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return;
+  let sw = vw, sh = vh, sx = 0, sy = 0;
+  if (!cam.hw && cam.zoom > 1) { sw = vw / cam.zoom; sh = vh / cam.zoom; sx = (vw - sw) / 2; sy = (vh - sh) / 2; }
+  const f = $('#camFlash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+  if (navigator.vibrate) navigator.vibrate(15);
+  try { cam.last = await addSlide(video, sx, sy, sw, sh); } catch (e) { return; }
+  cam.n++; camCount();
+  $('#camLast').style.backgroundImage = `url(${cam.last.thumb})`; $('#camLast').hidden = false; $('#camNote').hidden = false;
+};
+const camToNote = () => { const s = cam.last; closeCam(); if (s) location.hash = `#/s/${cur.id}/${s.id}`; };
+$('#camLast').onclick = camToNote; $('#camNote').onclick = camToNote;
+$('#camClose').onclick = closeCam;
+$('#camNative').onclick = () => { closeCam(); $('#fNative').click(); };
+$('#btnCam').onclick = openCam;
+document.addEventListener('visibilitychange', () => { if (document.hidden && cam.stream) closeCam(); });
+
+/* ---------- 設定視窗 ---------- */
+const dlgS = $('#dlgSettings'), dlgX = $('#dlgExport');
+const openDlg = d => d.showModal ? d.showModal() : d.setAttribute('open', ''), closeDlg = d => d.close ? d.close() : d.removeAttribute('open');
+async function openSettings() {
+  $('#cKey').value = cfg.key; $('#cModel').value = cfg.model; $('#cLvSlide').value = cfg.lvSlide; $('#cLvSum').value = cfg.lvSum; $('#cExtra').value = cfg.extra;
+  $('#cStore').textContent = '';
+  if (navigator.storage && navigator.storage.estimate) { try { const e = await navigator.storage.estimate(); $('#cStore').textContent = `照片存在這台裝置的瀏覽器裡，目前用了 ${(e.usage / 1048576).toFixed(1)} MB。清除瀏覽器網站資料會一併刪掉，重要的場次請先匯出。`; } catch (e) {} }
+  openDlg(dlgS);
+}
+function readCfg() { cfg.key = $('#cKey').value.trim(); cfg.model = $('#cModel').value.trim() || CFG_DEFAULT.model; cfg.lvSlide = $('#cLvSlide').value; cfg.lvSum = $('#cLvSum').value; cfg.extra = $('#cExtra').value; }
+$('#btnSettings').onclick = openSettings; $('#btnKeyGo').onclick = openSettings;
+$('#cCancel').onclick = () => { try { Object.assign(cfg, CFG_DEFAULT, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {} closeDlg(dlgS); };
+$('#cSave').onclick = () => { readCfg(); saveCfg(); closeDlg(dlgS); $('#keyWarn').hidden = !!cfg.key; toast('設定已儲存'); };
+$('#cTest').onclick = async () => {
+  readCfg(); if (!cfg.key) { toast('先貼上 API key'); return; }
+  const b = $('#cTest'); b.disabled = true; b.textContent = '測試中…';
+  try { await gemini({ parts: [{ text: '只回覆兩個字：收到' }], level: 'low' }); toast('連線成功，' + cfg.model + ' 可以用'); }
+  catch (e) { toast(e.message, 6000); }
+  b.disabled = false; b.textContent = '測試連線';
+};
+
+/* ---------- 匯出 ---------- */
+function exportMd() {
+  let t = cur.summary ? cur.summary.trim() + '\n' : `# ${cur.title || '未命名場次'}\n\n${[cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜')}\n`;
+  t += '\n---\n\n# 逐張筆記\n';
+  slides.forEach((s, i) => { t += `\n### S${i + 1}\n\n${(s.ai || '（未辨識）').replace(/^(#{1,3})\s/gm, '#### ')}\n`; if (s.text.trim()) t += `\n> 打字註記：${s.text.trim().replace(/\n/g, '\n> ')}\n`; });
+  return t;
+}
+const fileBase = () => (cur.title || '演講筆記').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) + '_' + fmtDate(cur.createdAt).slice(0, 10).replace(/\//g, '');
+function download(name, text, type) { const u = URL.createObjectURL(new Blob([text], { type })), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }
+$('#btnExport').onclick = () => openDlg(dlgX); $('#xClose').onclick = () => closeDlg(dlgX);
+$('#xCopy').onclick = async () => { try { await navigator.clipboard.writeText(exportMd()); toast('已複製'); } catch (e) { toast('這個瀏覽器不允許複製，請改用下載'); } };
+$('#xMd').onclick = () => download(fileBase() + '.md', exportMd(), 'text/markdown;charset=utf-8');
+$('#xHtml').onclick = async () => {
+  const b = $('#xHtml'); b.disabled = true; b.textContent = '製作中…';
+  try {
+    let body = `<main>${cur.summary ? md(cur.summary) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`}<hr><h1>逐張筆記</h1>`;
+    for (let i = 0; i < slides.length; i++) { const s = slides[i]; body += `<section><p class="n">S${i + 1}</p><img src="${await composite(s, 1400, 0.8)}" alt="S${i + 1}">${md(s.ai)}${s.text.trim() ? `<blockquote>打字註記：${esc(s.text.trim()).replace(/\n/g, '<br>')}</blockquote>` : ''}</section>`; }
+    const css = 'body{margin:0;background:#fff;color:#16233B;font:16px/1.65 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}main{max-width:820px;margin:0 auto;padding:24px 18px 80px}h1,h2,h3{font-family:"Songti TC","Noto Serif TC","PMingLiU",serif;line-height:1.35}h2{margin-top:1.6em}img{max-width:100%;height:auto;display:block;margin:8px 0}section{border-top:1px solid #D7DCE5;padding-top:14px;margin-top:26px;break-inside:avoid}.n{font-weight:700;background:#FFE45C;display:inline-block;padding:0 8px;margin:0}table{border-collapse:collapse;font-size:.92rem}.tw{overflow-x:auto}th,td{border-bottom:1px solid #D7DCE5;padding:6px 12px 6px 0;text-align:left;vertical-align:top}th{border-bottom:2px solid #16233B}blockquote{margin:.6em 0;padding-left:12px;border-left:3px solid #D7DCE5;color:#5B6779}hr{border:0;border-top:1px solid #D7DCE5;margin:2em 0}';
+    download(fileBase() + '.html', `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(cur.title || '演講筆記')}</title><style>${css}</style></head><body>${body}</main></body></html>`, 'text/html;charset=utf-8');
+  } catch (e) { toast('匯出失敗：' + e.message); }
+  b.disabled = false; b.textContent = '下載離線 HTML（含照片與手寫）';
+};
+$('#xDel').onclick = async () => {
+  if (!confirm(`刪除「${cur.title || '未命名場次'}」和裡面 ${slides.length} 張照片？無法復原。`)) return;
+  for (const s of slides) { await idb.del('slides', s.id); await idb.del('images', s.id); }
+  await idb.del('sessions', cur.id); closeDlg(dlgX); location.hash = '#/';
+};
+
+route().catch(e => { document.body.insertAdjacentHTML('afterbegin', `<p style="padding:16px">無法開啟本機儲存（${esc(e && e.message)}）。請不要用無痕模式開啟。</p>`); });
+</script>
+</body>
+</html>
