@@ -81,6 +81,10 @@ button{cursor:pointer}
 .view.on .bar{display:block}
 .bar > div{max-width:728px;margin:0 auto;display:grid;gap:10px;align-items:center}
 .bar .three{grid-template-columns:1fr 1.5fr 1fr}
+.bar .two{grid-template-columns:1fr 2fr}
+.barhint{max-width:728px;margin:0 auto 8px;font-size:.82rem;color:var(--ink2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notice.row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin:12px 0 0}
+.notice.row span:last-child{display:flex;gap:8px;margin-left:auto}
 .bar .btn{width:100%;min-height:52px}
 .bar .shoot{font-size:1.1rem}
 
@@ -96,6 +100,8 @@ button{cursor:pointer}
 .sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--rule);padding:0}
 .sw.on{outline:3px solid var(--pen);outline-offset:2px}
 .drawset{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.chk{display:flex;align-items:center;gap:10px;min-height:44px;margin-top:10px}
+.chk input{width:22px;height:22px;flex:none}
 label.f{display:block;font-size:.85rem;color:var(--ink2);margin:16px 0 6px}
 textarea{width:100%;background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;line-height:1.6;resize:vertical}
 .aihead{display:flex;align-items:center;justify-content:space-between;margin-top:22px;border-top:1px solid var(--rule);padding-top:8px}
@@ -196,11 +202,11 @@ dialog a{color:var(--pen)}
 
   <section id="v-home" class="view">
     <header class="top"><h1>開會拍照速記</h1><button class="txt" id="btnSettings">設定</button></header>
-    <p class="lede">拍下投影片，補上手寫或打字的註記，會後交給 Gemini 整理成一份演講筆記。</p>
+    <p class="lede">拍下投影片就送 Gemini 辨識，可以再補手寫或打字的註記，最後整理成演講筆記和提問。</p>
     <div class="notice" id="keyWarn" hidden>還沒設定 Gemini API key，拍照與註記可以先做，辨識要等設定之後。<button class="txt" id="btnKeyGo">前往設定</button></div>
     <ul class="sess" id="sessList"></ul>
-    <div class="empty" id="homeEmpty">還沒有場次。開一場，拍第一張投影片。</div>
-    <div class="bar"><div><button class="btn primary" id="btnNew">開始新場次</button></div></div>
+    <div class="empty" id="homeEmpty">還沒有場次。按下方「拍照」就會開一場並打開相機。</div>
+    <div class="bar"><p class="barhint" id="quickHint"></p><div class="two"><button class="btn" id="btnNew">新場次</button><button class="btn primary shoot" id="btnQuick">拍照</button></div></div>
   </section>
 
   <section id="v-sess" class="view">
@@ -212,6 +218,7 @@ dialog a{color:var(--pen)}
     <nav class="tabs"><button data-tab="slides" class="on" id="tabSlides">投影片</button><button data-tab="sum">演講筆記</button><button data-tab="q">提問</button></nav>
 
     <div id="tab-slides">
+      <div class="notice row" id="albumRow" hidden><span id="albumInfo"></span><span><button class="btn" id="btnAlbumSkip">不用存</button><button class="btn primary" id="btnAlbum">存到相簿</button></span></div>
       <div class="batch" id="batchRow" hidden><span id="batchInfo"></span><button class="btn" id="btnAll">辨識全部</button></div>
       <ol class="slides" id="slideList"></ol>
       <div class="empty" id="slidesEmpty">這一場還沒有照片。按下方「拍照」開始，可以連續拍；「相簿」可一次加入多張，「手寫頁」是一張空白紙。</div>
@@ -301,6 +308,9 @@ dialog a{color:var(--pen)}
   <label class="f" for="cIntro">提問開場的自我介紹（選填）</label>
   <input type="text" id="cIntro" autocomplete="off" placeholder="姓名、醫院、國家，中英文都可以">
   <small>有填的話，提問的開場白會帶上這句自我介紹；沒填就只有一句感謝。</small>
+  <label class="chk"><input type="checkbox" id="cAuto"> 拍照後自動送 AI 辨識</label>
+  <label class="chk"><input type="checkbox" id="cAlbum"> 拍照後存到手機相簿</label>
+  <small>iPhone／iPad 的瀏覽器不能自己寫入「照片」：拍完按「完成並存相簿」，在跳出的分享選單點「儲存影像」，這次拍的會一次存進去。Android 每拍一張會自動下載，在相簿的 Download 裡。從「相簿」加入的照片本來就在相簿，不會重複存。</small>
   <label class="f" for="cExtra">彙整時的額外要求（選填）</label>
   <textarea id="cExtra" rows="3" placeholder="例如：最後加一段「對本科臨床的影響」；表格優先。"></textarea>
   <small id="cStore"></small>
@@ -334,7 +344,7 @@ let toastT;
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
 
 /* ---------- 設定 ---------- */
-const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', lvQ: 'medium', intro: '', extra: '' };
+const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', lvQ: 'medium', intro: '', extra: '', auto: true, album: true };
 let cfg = { ...CFG_DEFAULT };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {}
 function saveCfg() { try { localStorage.setItem('snapnote.cfg', JSON.stringify(cfg)); } catch (e) { toast('這個瀏覽器不允許儲存設定（可能是無痕模式）'); } }
@@ -369,7 +379,13 @@ let cur = null;            // 目前場次
 let slides = [];           // 目前場次的投影片（依 order）
 let curSlide = null;       // 單張頁面顯示中的那張
 let tab = 'slides';
-const busy = new Set();    // 辨識中的 slide id
+const inflight = new Map(); // slide id -> 辨識中的 promise
+const queue = [];          // 拍照後排隊等自動辨識的 slide
+const live = new Map();    // 排隊或辨識中的 slide 物件；離開再回到場次時沿用同一個物件，避免互相覆蓋
+const albumFiles = new Map(); // slide id -> 還沒存到手機相簿的 File（先備好，才能在點擊當下直接分享）
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const ANDROID = /Android/i.test(navigator.userAgent);
+let quickTarget = null, pendingCam = false;
 const urls = new Map();    // slide id -> object URL
 let sessScroll = 0;
 
@@ -385,32 +401,56 @@ async function encode(src, sx, sy, sw, sh) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   c.getContext('2d').drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
   const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.88));
-  return { buf: await blob.arrayBuffer(), thumb: makeThumb(c, w, h, []), w, h };
+  return { blob, buf: await blob.arrayBuffer(), thumb: makeThumb(c, w, h, []), w, h };
 }
 function makeThumb(src, w, h, ink) {
   const tw = 320, th = Math.round(h * tw / w), c = document.createElement('canvas'); c.width = tw; c.height = th;
   const x = c.getContext('2d'); x.drawImage(src, 0, 0, tw, th); drawInk(x, ink, tw, th);
   return c.toDataURL('image/jpeg', 0.7);
 }
-async function addSlide(src, sx, sy, sw, sh, kind = 'photo') {
+async function addSlide(src, sx, sy, sw, sh, kind = 'photo', from = '') {   // from: 'cam' 表示這張是在網頁裡拍的
   const e = await encode(src, sx, sy, sw, sh);
   const s = { id: uid(), sid: cur.id, order: (slides.length ? slides[slides.length - 1].order : 0) + 1, kind, w: e.w, h: e.h, thumb: e.thumb, ink: [], text: '', ai: '', aiAt: 0, dirty: false, err: '', at: Date.now() };
   try { await idb.put('images', e.buf, s.id); await saveSlide(s); }
   catch (err) { toast('存不進去：裝置的瀏覽器儲存空間可能滿了'); throw err; }
   slides.push(s); await saveSession();
+  if (from === 'cam' && cfg.album && (IOS || ANDROID)) {
+    const f = albumFile(s, e.blob);
+    if (IOS) { s.album = 0; albumFiles.set(s.id, f); saveSlide(s); }
+    else download(f.name, f, 'image/jpeg');
+  }
+  if (kind === 'photo') enqueue(s);
   if (slides.length === 1 && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   return s;
 }
-async function addFiles(files) {
+async function addFiles(files, from) {
   let last = null;
   for (const f of files) {
     const u = URL.createObjectURL(f);
-    try { const im = await loadImg(u); last = await addSlide(im, 0, 0, im.naturalWidth, im.naturalHeight); }
+    try { const im = await loadImg(u); last = await addSlide(im, 0, 0, im.naturalWidth, im.naturalHeight, 'photo', from); }
     catch (e) { toast('有一張照片讀不出來，已略過'); }
     URL.revokeObjectURL(u);
   }
   return last;
 }
+
+/* ---------- 存到手機相簿 ---------- */
+function albumFile(s, blob) { const d = new Date(s.at), p = n => String(n).padStart(2, '0'); return new File([blob], `速記_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${s.order}.jpg`, { type: 'image/jpeg' }); }
+const albumPending = () => slides.filter(s => s.album === 0);
+function markSaved(list) { for (const s of list) { s.album = 1; albumFiles.delete(s.id); if (!s.deleted) saveSlide(s); } renderAlbum(); }
+function saveToAlbum() {   // 一定要在點擊事件裡直接呼叫，iOS 才允許打開分享選單
+  const list = albumPending().filter(s => albumFiles.has(s.id)); if (!list.length) return;
+  const files = list.map(s => albumFiles.get(s.id));
+  if (navigator.canShare && navigator.canShare({ files })) {
+    navigator.share({ files }).then(() => markSaved(list)).catch(e => { if (e && e.name !== 'AbortError') toast('沒有存成功，可以在投影片列表上方再按一次「存到相簿」', 4500); renderAlbum(); });
+  } else { files.forEach(f => download(f.name, f, 'image/jpeg')); markSaved(list); toast('這個瀏覽器不支援分享選單，照片已改成下載到「檔案」'); }
+}
+function renderAlbum() {
+  const n = cur ? albumPending().length : 0;
+  $('#albumRow').hidden = !n; $('#albumInfo').textContent = `${n} 張還沒存到手機相簿`;
+  $('#camClose').textContent = n ? '完成並存相簿' : '完成';
+}
+function preloadAlbum() { for (const s of albumPending()) if (!albumFiles.has(s.id)) imgBlob(s.id).then(b => { if (s.album === 0) albumFiles.set(s.id, albumFile(s, b)); }).catch(() => {}); }
 
 /* ---------- 筆跡：座標以圖片寬高正規化 (0–1) ---------- */
 function drawInk(x, ink, w, h) {
@@ -458,7 +498,8 @@ inkC.addEventListener('pointerup', endStroke); inkC.addEventListener('pointercan
 function inkChanged() {
   const s = curSlide; paintInk();
   if (dImg.naturalWidth) s.thumb = makeThumb(dImg, s.w, s.h, s.ink);
-  if (s.ai) s.dirty = true;
+  s.rev = (s.rev || 0) + 1;
+  if (s.ai || inflight.has(s.id)) s.dirty = s.inkDirty = true;
   saveSlide(s); paintStatus(s);
 }
 function setDraw(on) {
@@ -612,20 +653,36 @@ async function composite(s, max = 2400, q = 0.88) {   // 照片 + 手寫合成�
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
   x.drawImage(im, 0, 0, w, h); drawInk(x, s.ink, w, h); return c.toDataURL('image/jpeg', q);
 }
-async function recognize(s) {
-  if (busy.has(s.id)) return;
-  busy.add(s.id); s.err = ''; paintStatus(s);
+function recognize(s) {   // 同一張同時只跑一次；重複呼叫拿到同一個 promise
+  if (inflight.has(s.id)) return inflight.get(s.id);
+  const p = doRecognize(s); inflight.set(s.id, p); live.set(s.id, s); return p;
+}
+let running = 0;
+function enqueue(s) { if (!cfg.auto || !cfg.key) return; queue.push(s); live.set(s.id, s); paintStatus(s); pump(); }
+function pump() {
+  while (running < 2 && queue.length) {
+    const s = queue.shift();
+    if (s.deleted || s.ai || inflight.has(s.id)) { if (!inflight.has(s.id)) live.delete(s.id); paintStatus(s); continue; }
+    running++;
+    recognize(s).then(() => { running--; if (/^API key|^找不到模型/.test(s.err)) { queue.splice(0).forEach(paintStatus); toast(s.err, 6000); } pump(); });
+  }
+}
+async function doRecognize(s) {
+  await null; s.err = ''; paintStatus(s);
+  const rev = s.rev || 0;
   try {
     const imgs = [];
     if (s.kind !== 'blank') imgs.push(await b64(await imgBlob(s.id)));
     if (s.ink.length || s.kind === 'blank') imgs.push((await composite(s)).split(',')[1]);
     const parts = imgs.map(d => { const p = { inlineData: { mimeType: 'image/jpeg', data: d } }; if (isG3()) p.mediaResolution = { level: 'media_resolution_high' }; return p; });
-    parts.push({ text: `這是本場第 ${slides.indexOf(s) + 1} 張。` + (s.kind === 'blank' ? '這是一張空白手寫頁，內容全部是聽講者的手寫筆記。' : s.ink.length ? '第二張影像是加上手繪筆跡的同一張照片。' : '') + (s.text.trim() ? `\n\n聽講者的打字註記：\n${s.text.trim()}` : '') + '\n\n請依規則寫出這一張的筆記。' });
+    parts.push({ text: `這是本場第 ${(slides.indexOf(s) + 1) || s.order} 張。` + (s.kind === 'blank' ? '這是一張空白手寫頁，內容全部是聽講者的手寫筆記。' : s.ink.length ? '第二張影像是加上手繪筆跡的同一張照片。' : '') + (s.text.trim() ? `\n\n聽講者的打字註記：\n${s.text.trim()}` : '') + '\n\n請依規則寫出這一張的筆記。' });
     s.ai = await gemini({ system: SYS_SLIDE, parts, level: cfg.lvSlide });
-    s.aiAt = Date.now(); s.dirty = false;
+    s.aiAt = Date.now(); s.edited = false;
+    if ((s.rev || 0) === rev) s.dirty = s.inkDirty = false; else s.dirty = true;   // 辨識途中又加了註記
   } catch (e) { s.err = e.message || String(e); }
-  busy.delete(s.id);
-  await saveSlide(s); paintStatus(s);
+  inflight.delete(s.id); if (!queue.includes(s)) live.delete(s.id);
+  if (!s.deleted) await saveSlide(s);
+  paintStatus(s);
 }
 async function recognizeAll(list) {
   let i = 0, done = 0; const n = list.length;
@@ -638,7 +695,7 @@ async function recognizeAll(list) {
 }
 async function deckText() {   // 先把沒辨識的補完，再組成整場的文字
   while ($('#btnAll').disabled) await sleep(300);
-  const todo = slides.filter(s => !s.ai);
+  const todo = slides.filter(s => !s.ai || (s.inkDirty && !s.edited));   // 沒辨識的，以及辨識後又加了手寫的
   if (todo.length) await recognizeAll(todo);
   if (!slides.some(s => s.ai || s.text.trim())) throw new Error('沒有任何一張辨識成功：' + ((slides.find(s => s.err) || {}).err || ''));
   let t = `演講題目：${cur.title || '（未填）'}\n講者：${cur.speaker || '（未填）'}\n會議：${cur.event || '（未填）'}\n日期：${fmtDate(cur.createdAt).slice(0, 10)}\n投影片張數：${slides.length}\n`;
@@ -680,7 +737,8 @@ async function askQuestions() {
 function show(id) { $$('.view').forEach(v => v.classList.toggle('on', v.id === id)); $('#app').classList.toggle('wide', id === 'v-slide'); }
 function slideTitle(s) { const m = (s.ai || '').match(/^#{1,4}\s+(.+)$/m); return m ? m[1].replace(/\*\*/g, '') : (s.kind === 'blank' ? '手寫頁' : '尚未辨識'); }
 function statusOf(s) {
-  if (busy.has(s.id)) return ['busy', 'AI 辨識中…'];
+  if (inflight.has(s.id)) return ['busy', 'AI 辨識中…'];
+  if (queue.includes(s)) return ['busy', '排隊等 AI 辨識…'];
   if (s.err) return ['err', '辨識失敗：' + s.err];
   if (!s.ai) return ['', ''];
   if (s.dirty) return ['', '註記有更新，重新辨識才會納入'];
@@ -693,15 +751,19 @@ function rowInner(s, i) {
 }
 function renderSlides() {
   $('#slideList').innerHTML = slides.map((s, i) => `<li><a href="#/s/${cur.id}/${s.id}" data-id="${s.id}">${rowInner(s, i)}</a></li>`).join('');
+  renderAlbum();
   $('#slidesEmpty').hidden = slides.length > 0;
   $('#tabSlides').textContent = slides.length ? `投影片 ${slides.length}` : '投影片';
+  renderBatch();
+}
+function renderBatch() {
   const todo = slides.filter(s => !s.ai).length;
   $('#batchRow').hidden = !slides.length;
   if (!$('#btnAll').disabled) $('#batchInfo').textContent = todo ? `${todo} 張尚未辨識` : '全部已辨識';
   $('#btnAll').textContent = todo ? `辨識全部（${todo}）` : '全部重新辨識';
 }
 function paintStatus(s) {
-  const a = $(`#slideList a[data-id="${s.id}"]`); if (a) a.innerHTML = rowInner(s, slides.indexOf(s));
+  const a = $(`#slideList a[data-id="${s.id}"]`); if (a) { a.innerHTML = rowInner(s, slides.indexOf(s)); renderBatch(); }
   if (curSlide === s && $('#v-slide').classList.contains('on')) renderDetailAi();
 }
 function renderQ() {
@@ -729,17 +791,20 @@ async function showHome() {
   const list = (await idb.all('sessions')).sort((a, b) => b.createdAt - a.createdAt);
   $('#sessList').innerHTML = list.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.title || '未命名場次')}</b><span>${esc([fmtDate(s.createdAt), s.speaker, s.event, (s.n || 0) + ' 張', s.summary ? '已彙整' : '', s.questions ? '已擬提問' : ''].filter(Boolean).join('　'))}</span></a></li>`).join('');
   $('#homeEmpty').hidden = list.length > 0; $('#sessList').hidden = !list.length;
+  quickTarget = list.slice().sort((a, b) => b.updatedAt - a.updatedAt).find(x => Date.now() - x.updatedAt < 3 * 3600e3) || null;   // 三小時內動過的場次就接續
+  $('#quickHint').textContent = quickTarget ? `拍照會接續「${quickTarget.title || '未命名場次'}」` : '拍照會開一個新場次';
   $('#keyWarn').hidden = !!cfg.key;
   show('v-home'); scrollTo(0, 0);
 }
 async function loadSession(s) {
-  cur = s; slides = (await idb.bySid(s.id)).sort((a, b) => a.order - b.order);
+  cur = s; slides = (await idb.bySid(s.id)).map(x => live.get(x.id) || x).sort((a, b) => a.order - b.order);
+  preloadAlbum();
   $('#mTitle').value = s.title || ''; $('#mSpeaker').value = s.speaker || ''; $('#mEvent').value = s.event || '';
   $('#sumEdit').hidden = true; $('#sumView').hidden = false; $('#btnSumEdit').textContent = '編輯';
   $('#qEdit').hidden = true; $('#qView').hidden = false; $('#btnQEdit').textContent = '編輯'; $('#qFocus').value = s.qFocus || '';
   setTab('slides'); sessScroll = 0;
 }
-function showSession() { curSlide = null; setDraw(false); renderSlides(); renderSum(); show('v-sess'); fitTitle(); scrollTo(0, sessScroll); }
+function showSession() { curSlide = null; setDraw(false); renderSlides(); renderSum(); show('v-sess'); fitTitle(); scrollTo(0, sessScroll); if (pendingCam) { pendingCam = false; openCam(); } }
 async function showSlide(s) {
   if ($('#v-sess').classList.contains('on')) sessScroll = scrollY;
   curSlide = s; pen.stroke = null;
@@ -753,7 +818,7 @@ async function showSlide(s) {
   renderDetailAi(); show('v-slide'); scrollTo(0, 0);
 }
 function renderDetailAi() {
-  const s = curSlide, [cls, st] = statusOf(s), b = busy.has(s.id);
+  const s = curSlide, [cls, st] = statusOf(s), b = inflight.has(s.id);
   $('#dStatus').textContent = st || (s.ai ? 'AI 筆記　' + fmtDate(s.aiAt) : '還沒辨識。可以先寫註記，辨識時會一起整理。');
   $('#dStatus').className = cls === 'err' ? 'st err' : cls === 'busy' ? 'st busy' : '';
   $('#dAiBtn').disabled = b; $('#dAiBtn').textContent = b ? '辨識中…' : s.ai ? '重新辨識' : 'AI 辨識';
@@ -770,7 +835,11 @@ async function route() {
 addEventListener('hashchange', route);
 
 /* ---------- 場次操作 ---------- */
-$('#btnNew').onclick = async () => { const s = { id: uid(), title: '', speaker: '', event: '', createdAt: Date.now(), updatedAt: Date.now(), n: 0, summary: '' }; await idb.put('sessions', s); location.hash = '#/s/' + s.id; };
+const newSession = async () => { const s = { id: uid(), title: '', speaker: '', event: '', createdAt: Date.now(), updatedAt: Date.now(), n: 0, summary: '' }; await idb.put('sessions', s); return s; };
+$('#btnNew').onclick = async () => { location.hash = '#/s/' + (await newSession()).id; };
+$('#btnQuick').onclick = async () => { const s = quickTarget || await newSession(); pendingCam = true; location.hash = '#/s/' + s.id; };
+$('#btnAlbum').onclick = saveToAlbum;
+$('#btnAlbumSkip').onclick = () => markSaved(albumPending());
 let metaT; const fitTitle = () => { const t = $('#mTitle'); t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; };
 addEventListener('resize', fitTitle);
 const metaSave = () => { fitTitle(); cur.title = $('#mTitle').value.replace(/\s*\n\s*/g, ' ').trim(); cur.speaker = $('#mSpeaker').value.trim(); cur.event = $('#mEvent').value.trim(); clearTimeout(metaT); metaT = setTimeout(saveSession, 400); };
@@ -790,17 +859,17 @@ $('#btnQEdit').onclick = async () => {
 };
 $('#qFocus').oninput = () => { cur.qFocus = $('#qFocus').value; clearTimeout(metaT); metaT = setTimeout(saveSession, 400); };
 $('#btnLib').onclick = () => $('#fLib').click();
-$('#fLib').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; toast(`加入 ${f.length} 張…`); await addFiles(f); renderSlides(); renderSum(); };
-$('#fNative').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; const s = await addFiles(f); renderSlides(); if (s) toast(`已存為第 ${slides.length} 張`); };
+$('#fLib').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; toast(`加入 ${f.length} 張…`); await addFiles(f, 'lib'); renderSlides(); renderSum(); };
+$('#fNative').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; const s = await addFiles(f, 'cam'); renderSlides(); if (s) toast(`已存為第 ${slides.length} 張`); };
 $('#btnBlank').onclick = async () => { const c = document.createElement('canvas'); c.width = 1600; c.height = 1200; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 1600, 1200); const s = await addSlide(c, 0, 0, 1600, 1200, 'blank'); pen.color = '#111111'; pen.erase = false; location.hash = `#/s/${cur.id}/${s.id}`; };
 
 /* ---------- 單張操作 ---------- */
-let textT; $('#dText').oninput = () => { const s = curSlide; s.text = $('#dText').value; if (s.ai && !s.dirty) { s.dirty = true; renderDetailAi(); } clearTimeout(textT); textT = setTimeout(() => saveSlide(s), 400); };
+let textT; $('#dText').oninput = () => { const s = curSlide; s.text = $('#dText').value; s.rev = (s.rev || 0) + 1; if ((s.ai || inflight.has(s.id)) && !s.dirty) { s.dirty = true; renderDetailAi(); } clearTimeout(textT); textT = setTimeout(() => saveSlide(s), 400); };
 $('#dAiBtn').onclick = () => { if (!haveKey()) return; const s = curSlide; if (!$('#dAiEdit').hidden) $('#dEditAi').click(); recognize(s); };
 $('#dEditAi').onclick = async () => {
   const ed = $('#dAiEdit'), s = curSlide;
   if (ed.hidden) { ed.value = s.ai; ed.hidden = false; $('#dAi').hidden = true; $('#dEditAi').textContent = '完成編輯'; }
-  else { s.ai = ed.value; await saveSlide(s); ed.hidden = true; $('#dAi').hidden = false; $('#dEditAi').textContent = '編輯'; renderDetailAi(); }
+  else { if (s.ai !== ed.value) s.edited = true; s.ai = ed.value; await saveSlide(s); ed.hidden = true; $('#dAi').hidden = false; $('#dEditAi').textContent = '編輯'; renderDetailAi(); }
 };
 const go = d => { const s = slides[slides.indexOf(curSlide) + d]; if (s) location.replace(`#/s/${cur.id}/${s.id}`); };
 $('#dPrev').onclick = () => go(-1); $('#dNext').onclick = () => go(1);
@@ -808,7 +877,7 @@ async function move(d) { const i = slides.indexOf(curSlide), j = i + d; if (j < 
 $('#dUp').onclick = () => move(-1); $('#dDown').onclick = () => move(1);
 $('#dDel').onclick = async () => {
   if (!confirm('刪除這張照片和它的註記？')) return;
-  const s = curSlide, i = slides.indexOf(s); slides.splice(i, 1);
+  const s = curSlide, i = slides.indexOf(s); slides.splice(i, 1); s.deleted = true; albumFiles.delete(s.id);
   await idb.del('slides', s.id); await idb.del('images', s.id); await saveSession();
   if (urls.has(s.id)) { URL.revokeObjectURL(urls.get(s.id)); urls.delete(s.id); }
   const n = slides[i] || slides[i - 1]; location.replace(n ? `#/s/${cur.id}/${n.id}` : `#/s/${cur.id}`);
@@ -829,7 +898,7 @@ async function openCam() {
   cam.n = 0; cam.last = null; $('#camLast').hidden = true; $('#camNote').hidden = true; camCount();
   $('#cam').hidden = false;
 }
-function camCount() { $('#camCount').textContent = `本場共 ${slides.length} 張` + (cam.n ? `（這次 ${cam.n}）` : ''); }
+function camCount() { $('#camCount').textContent = `共 ${slides.length} 張`; renderAlbum(); }
 function setZoom(v) { cam.zoom = v; $('#camZoomVal').textContent = (+v).toFixed(1) + '×'; if (cam.hw) { cam.track.applyConstraints({ advanced: [{ zoom: v }] }).catch(() => {}); video.style.transform = ''; } else video.style.transform = `scale(${v})`; }
 $('#camZoom').oninput = e => setZoom(+e.target.value);
 function closeCam() { if (cam.stream) cam.stream.getTracks().forEach(t => t.stop()); cam.stream = null; video.srcObject = null; $('#cam').hidden = true; renderSlides(); renderSum(); }
@@ -839,13 +908,13 @@ $('#camShoot').onclick = async () => {
   if (!cam.hw && cam.zoom > 1) { sw = vw / cam.zoom; sh = vh / cam.zoom; sx = (vw - sw) / 2; sy = (vh - sh) / 2; }
   const f = $('#camFlash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
   if (navigator.vibrate) navigator.vibrate(15);
-  try { cam.last = await addSlide(video, sx, sy, sw, sh); } catch (e) { return; }
+  try { cam.last = await addSlide(video, sx, sy, sw, sh, 'photo', 'cam'); } catch (e) { return; }
   cam.n++; camCount();
   $('#camLast').style.backgroundImage = `url(${cam.last.thumb})`; $('#camLast').hidden = false; $('#camNote').hidden = false;
 };
-const camToNote = () => { const s = cam.last; closeCam(); if (s) location.hash = `#/s/${cur.id}/${s.id}`; };
+const camToNote = () => { const s = cam.last; saveToAlbum(); closeCam(); if (s) location.hash = `#/s/${cur.id}/${s.id}`; };
 $('#camLast').onclick = camToNote; $('#camNote').onclick = camToNote;
-$('#camClose').onclick = closeCam;
+$('#camClose').onclick = () => { saveToAlbum(); closeCam(); };
 $('#camNative').onclick = () => { closeCam(); $('#fNative').click(); };
 $('#btnCam').onclick = openCam;
 document.addEventListener('visibilitychange', () => { if (document.hidden && cam.stream) closeCam(); });
@@ -854,12 +923,12 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && cam
 const dlgS = $('#dlgSettings'), dlgX = $('#dlgExport');
 const openDlg = d => d.showModal ? d.showModal() : d.setAttribute('open', ''), closeDlg = d => d.close ? d.close() : d.removeAttribute('open');
 async function openSettings() {
-  $('#cKey').value = cfg.key; $('#cModel').value = cfg.model; $('#cLvSlide').value = cfg.lvSlide; $('#cLvSum').value = cfg.lvSum; $('#cLvQ').value = cfg.lvQ; $('#cIntro').value = cfg.intro; $('#cExtra').value = cfg.extra;
+  $('#cKey').value = cfg.key; $('#cModel').value = cfg.model; $('#cLvSlide').value = cfg.lvSlide; $('#cLvSum').value = cfg.lvSum; $('#cLvQ').value = cfg.lvQ; $('#cIntro').value = cfg.intro; $('#cExtra').value = cfg.extra; $('#cAuto').checked = cfg.auto; $('#cAlbum').checked = cfg.album;
   $('#cStore').textContent = '';
   if (navigator.storage && navigator.storage.estimate) { try { const e = await navigator.storage.estimate(); $('#cStore').textContent = `照片存在這台裝置的瀏覽器裡，目前用了 ${(e.usage / 1048576).toFixed(1)} MB。清除瀏覽器網站資料會一併刪掉，重要的場次請先匯出。`; } catch (e) {} }
   openDlg(dlgS);
 }
-function readCfg() { cfg.key = $('#cKey').value.trim(); cfg.model = $('#cModel').value.trim() || CFG_DEFAULT.model; cfg.lvSlide = $('#cLvSlide').value; cfg.lvSum = $('#cLvSum').value; cfg.lvQ = $('#cLvQ').value; cfg.intro = $('#cIntro').value.trim(); cfg.extra = $('#cExtra').value; }
+function readCfg() { cfg.key = $('#cKey').value.trim(); cfg.model = $('#cModel').value.trim() || CFG_DEFAULT.model; cfg.lvSlide = $('#cLvSlide').value; cfg.lvSum = $('#cLvSum').value; cfg.lvQ = $('#cLvQ').value; cfg.intro = $('#cIntro').value.trim(); cfg.extra = $('#cExtra').value; cfg.auto = $('#cAuto').checked; cfg.album = $('#cAlbum').checked; }
 $('#btnSettings').onclick = openSettings; $('#btnKeyGo').onclick = openSettings;
 $('#cCancel').onclick = () => { try { Object.assign(cfg, CFG_DEFAULT, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {} closeDlg(dlgS); };
 $('#cSave').onclick = () => { readCfg(); saveCfg(); closeDlg(dlgS); $('#keyWarn').hidden = !!cfg.key; toast('設定已儲存'); };
@@ -896,7 +965,7 @@ $('#xHtml').onclick = async () => {
 };
 $('#xDel').onclick = async () => {
   if (!confirm(`刪除「${cur.title || '未命名場次'}」和裡面 ${slides.length} 張照片？無法復原。`)) return;
-  for (const s of slides) { await idb.del('slides', s.id); await idb.del('images', s.id); }
+  for (const s of slides) { s.deleted = true; albumFiles.delete(s.id); await idb.del('slides', s.id); await idb.del('images', s.id); }
   await idb.del('sessions', cur.id); closeDlg(dlgX); location.hash = '#/';
 };
 
