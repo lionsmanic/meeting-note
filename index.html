@@ -104,7 +104,14 @@ button{cursor:pointer}
 .chk input{width:22px;height:22px;flex:none}
 label.f{display:block;font-size:.85rem;color:var(--ink2);margin:16px 0 6px}
 textarea{width:100%;background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;line-height:1.6;resize:vertical}
-.aihead{display:flex;align-items:center;justify-content:space-between;margin-top:22px;border-top:1px solid var(--rule);padding-top:8px}
+.pad{position:relative;background:#fff repeating-linear-gradient(#fff 0 31px,#E4E8EF 31px 32px);border:1px solid var(--rule);border-radius:4px;aspect-ratio:4/3}
+.pad canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.padrow{display:flex;justify-content:flex-end;margin-top:6px}
+.padrow .btn{font-size:.85rem;min-height:40px;padding:6px 12px}
+.aibtn{display:flex;gap:8px}
+.top .sp{min-width:44px}
+#dAlbumRow{margin:0 0 12px}
+.aihead{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;margin-top:22px;border-top:1px solid var(--rule);padding-top:8px}
 .aihead span{font-size:.85rem;color:var(--ink2)}
 .foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:28px}
 .foot .btn{font-size:.9rem}
@@ -213,12 +220,17 @@ dialog a{color:var(--pen)}
   #toast{bottom:calc(70px + env(safe-area-inset-bottom))}
 }
 @media (min-width:700px){.stage{margin:0}.slides a{grid-template-columns:168px minmax(0,1fr)}}
-@media (min-width:1000px){
+@media (min-width:1000px), (min-width:640px) and (orientation:landscape){
   #app.wide{max-width:1240px}
   #app.wide .view.on{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);column-gap:28px;align-items:start}
-  #app.wide .top{grid-column:1/-1}
+  #app.wide .top,#app.wide #dAlbumRow{grid-column:1/-1}
   .dL{position:sticky;top:8px}
-  .dR label.f:first-child{margin-top:0}
+  .dR label.f:first-child,#padWrap label.f{margin-top:0}
+  #app.wide .stage img{max-height:calc(100vh - 215px);max-height:calc(100dvh - 215px)}
+}
+@media (max-height:560px) and (orientation:landscape){   /* 手機橫向：螢幕太矮，左欄不固定，整頁一起捲 */
+  .dL{position:static}
+  #app.wide .stage img{max-height:calc(100vh - 76px);max-height:calc(100dvh - 76px)}
 }
 </style>
 </head>
@@ -227,7 +239,7 @@ dialog a{color:var(--pen)}
 
   <section id="v-home" class="view">
     <header class="top"><h1>開會拍照速記</h1><button class="txt" id="btnSettings">設定</button></header>
-    <p class="lede">拍下投影片就送 Gemini 辨識，可以再補手寫或打字的註記，最後整理成演講筆記和提問。</p>
+    <p class="lede">拍下投影片，在照片旁手寫或打字，AI 再整理成筆記；最後彙整整場的重點與提問，匯出 PDF 或 PowerPoint。</p>
     <div class="notice" id="keyWarn" hidden>還沒設定 Gemini API key，拍照與註記可以先做，辨識要等設定之後。<button class="txt" id="btnKeyGo">前往設定</button></div>
     <ul class="sess" id="sessList"></ul>
     <div class="empty" id="homeEmpty">還沒有場次。按下方「拍照」就會開一場並打開相機。</div>
@@ -272,12 +284,13 @@ dialog a{color:var(--pen)}
   </section>
 
   <section id="v-slide" class="view">
-    <header class="top"><a class="txt" id="dBack" href="#/">‹ 返回</a><span id="dPos"></span><button class="txt" id="dShoot">繼續拍</button></header>
+    <header class="top"><a class="txt" id="dBack" href="#/">‹ 返回</a><span id="dPos"></span><span class="sp"></span></header>
+    <div class="notice row" id="dAlbumRow" hidden><span>原檔還沒存到手機相簿</span><span><button class="btn primary" id="dAlbum">存到相簿</button></span></div>
     <div class="dL">
     <div class="stage" id="stage"><div class="frame"><img id="dImg" alt="投影片照片"><canvas id="dInk"></canvas></div></div>
     <div class="tools">
-      <button class="btn" id="tDraw">手寫</button>
-      <span class="drawset" id="drawSet" hidden>
+      <button class="btn" id="tDraw">在照片上畫</button>
+      <span class="drawset" id="drawSet">
         <button class="sw" data-c="#E0312B" style="background:#E0312B" aria-label="紅色"></button>
         <button class="sw" data-c="#1F4FBF" style="background:#1F4FBF" aria-label="藍色"></button>
         <button class="sw" data-c="#111111" style="background:#111111" aria-label="黑色"></button>
@@ -290,10 +303,15 @@ dialog a{color:var(--pen)}
     </div>
     </div>
     <div class="dR">
+    <div id="padWrap">
+      <label class="f" id="padLabel">手寫筆記</label>
+      <div class="pad" id="padBox" role="img" aria-labelledby="padLabel"><canvas id="dPad"></canvas></div>
+      <div class="padrow"><button class="btn" id="padMore">紙不夠，加長</button></div>
+    </div>
     <label class="f" for="dText">打字註記</label>
     <textarea id="dText" rows="3" placeholder="講者口頭補充、自己的想法、要追的文獻…"></textarea>
 
-    <div class="aihead"><span id="dStatus"></span><button class="btn" id="dEditAi" hidden>編輯</button></div>
+    <div class="aihead"><span id="dStatus"></span><span class="aibtn"><button class="btn" id="dEditAi" hidden>編輯</button><button class="btn primary" id="dAiBtn">AI 生成筆記</button></span></div>
     <div class="note" id="dAi"></div>
     <textarea id="dAiEdit" rows="14" hidden></textarea>
 
@@ -303,7 +321,7 @@ dialog a{color:var(--pen)}
     </div>
     <div class="bar"><div class="three">
       <button class="btn" id="dPrev">‹ 上一張</button>
-      <button class="btn primary" id="dAiBtn">AI 辨識</button>
+      <button class="btn primary shoot" id="dShoot">繼續拍</button>
       <button class="btn" id="dNext">下一張 ›</button>
     </div></div>
   </section>
@@ -333,9 +351,15 @@ dialog a{color:var(--pen)}
   <label class="f" for="cIntro">提問開場的自我介紹（選填）</label>
   <input type="text" id="cIntro" autocomplete="off" placeholder="姓名、醫院、國家，中英文都可以">
   <small>有填的話，提問的開場白會帶上這句自我介紹；沒填就只有一句感謝。</small>
-  <label class="chk"><input type="checkbox" id="cAuto"> 拍照後自動送 AI 辨識</label>
-  <label class="chk"><input type="checkbox" id="cAlbum"> 拍照後存到手機相簿</label>
-  <small>iPhone／iPad 的瀏覽器不能自己寫入「照片」：拍完按「完成並存相簿」，在跳出的分享選單點「儲存影像」，這次拍的會一次存進去。Android 每拍一張會自動下載，在相簿的 Download 裡。從「相簿」加入的照片本來就在相簿，不會重複存。</small>
+  <div class="rowS">
+    <div><label class="f" for="cAfter">拍完一張之後</label><select id="cAfter"><option value="note">進入註記畫面</option><option value="burst">留在相機連拍</option></select></div>
+    <div><label class="f" for="cCamera">用哪個相機</label><select id="cCamera"><option value="page">網頁內相機</option><option value="system">手機內建相機</option></select></div>
+  </div>
+  <small>手機內建相機畫質最好，存進相簿的是相機原始檔，但每張要多按一次「使用照片」。網頁內相機存的是拍到的原始畫面，不壓小。</small>
+  <label class="chk"><input type="checkbox" id="cAuto"> 自動產生 AI 筆記</label>
+  <small>寫完註記、離開那一張時自動送出，手寫和打字會一起交給 AI；連拍或從相簿加入的則拍完就送。關掉就改成自己按「AI 生成筆記」。</small>
+  <label class="chk"><input type="checkbox" id="cAlbum"> 拍照後把原檔存到手機相簿</label>
+  <small>iPhone／iPad 的瀏覽器不能自己寫入「照片」：拍完在註記畫面上方按「存到相簿」，再點分享選單的「儲存影像」。Android 每拍一張會自動下載到相簿的 Download。從「相簿」加入的照片不會重複存。</small>
   <label class="f" for="cExtra">彙整時的額外要求（選填）</label>
   <textarea id="cExtra" rows="3" placeholder="例如：最後加一段「對本科臨床的影響」；表格優先。"></textarea>
   <small id="cStore"></small>
@@ -373,7 +397,7 @@ let toastT;
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
 
 /* ---------- 設定 ---------- */
-const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', lvQ: 'medium', intro: '', extra: '', auto: true, album: true };
+const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', lvQ: 'medium', intro: '', extra: '', auto: true, album: true, after: 'note', camera: 'page' };
 let cfg = { ...CFG_DEFAULT };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {}
 function saveCfg() { try { localStorage.setItem('snapnote.cfg', JSON.stringify(cfg)); } catch (e) { toast('這個瀏覽器不允許儲存設定（可能是無痕模式）'); } }
@@ -383,8 +407,8 @@ const idb = {
   p: null,
   open() {
     return this.p ||= new Promise((res, rej) => {
-      const r = indexedDB.open('snapnote', 1);
-      r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('sessions', { keyPath: 'id' }); d.createObjectStore('slides', { keyPath: 'id' }).createIndex('sid', 'sid'); d.createObjectStore('images'); };
+      const r = indexedDB.open('snapnote', 2);
+      r.onupgradeneeded = () => { const d = r.result, has = n => d.objectStoreNames.contains(n); if (!has('sessions')) d.createObjectStore('sessions', { keyPath: 'id' }); if (!has('slides')) d.createObjectStore('slides', { keyPath: 'id' }).createIndex('sid', 'sid'); if (!has('images')) d.createObjectStore('images'); if (!has('orig')) d.createObjectStore('orig'); };   // orig：還沒存進相簿的相機原檔
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     });
   },
@@ -437,26 +461,26 @@ function makeThumb(src, w, h, ink) {
   const x = c.getContext('2d'); x.drawImage(src, 0, 0, tw, th); drawInk(x, ink, tw, th);
   return c.toDataURL('image/jpeg', 0.7);
 }
-async function addSlide(src, sx, sy, sw, sh, kind = 'photo', from = '') {   // from: 'cam' 表示這張是在網頁裡拍的
+async function addSlide(src, sx, sy, sw, sh, kind = 'photo', opt = {}) {   // opt.from 'cam'：相機拍的；opt.orig：原檔；opt.hold：先不送 AI，等寫完註記
   const e = await encode(src, sx, sy, sw, sh);
   const s = { id: uid(), sid: cur.id, order: (slides.length ? slides[slides.length - 1].order : 0) + 1, kind, w: e.w, h: e.h, thumb: e.thumb, ink: [], text: '', ai: '', aiAt: 0, dirty: false, err: '', at: Date.now() };
   try { await idb.put('images', e.buf, s.id); await saveSlide(s); }
   catch (err) { toast('存不進去：裝置的瀏覽器儲存空間可能滿了'); throw err; }
   slides.push(s); await saveSession();
-  if (from === 'cam' && cfg.album && (IOS || ANDROID)) {
-    const f = albumFile(s, e.blob);
-    if (IOS) { s.album = 0; albumFiles.set(s.id, f); saveSlide(s); }
-    else download(f.name, f, 'image/jpeg');
+  if (opt.from === 'cam' && cfg.album && (IOS || ANDROID)) {
+    const f = albumFile(s, opt.orig || e.blob);
+    if (IOS) { s.album = 0; albumFiles.set(s.id, f); saveSlide(s); f.arrayBuffer().then(buf => idb.put('orig', { buf, type: f.type }, s.id)).catch(() => {}); }
+    else download(f.name, f, f.type);
   }
-  if (kind === 'photo') enqueue(s);
+  if (kind === 'photo' && !opt.hold) enqueue(s);
   if (slides.length === 1 && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   return s;
 }
-async function addFiles(files, from) {
+async function addFiles(files, from, hold) {
   let last = null;
   for (const f of files) {
     const u = URL.createObjectURL(f);
-    try { const im = await loadImg(u); last = await addSlide(im, 0, 0, im.naturalWidth, im.naturalHeight, 'photo', from); }
+    try { const im = await loadImg(u); last = await addSlide(im, 0, 0, im.naturalWidth, im.naturalHeight, 'photo', { from, orig: from === 'cam' ? f : null, hold }); }
     catch (e) { toast('有一張照片讀不出來，已略過'); }
     URL.revokeObjectURL(u);
   }
@@ -464,9 +488,9 @@ async function addFiles(files, from) {
 }
 
 /* ---------- 存到手機相簿 ---------- */
-function albumFile(s, blob) { const d = new Date(s.at), p = n => String(n).padStart(2, '0'); return new File([blob], `速記_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${s.order}.jpg`, { type: 'image/jpeg' }); }
+function albumFile(s, blob) { const d = new Date(s.at), p = n => String(n).padStart(2, '0'), type = blob.type || 'image/jpeg', ext = /png/.test(type) ? 'png' : /hei[cf]/.test(type) ? 'heic' : 'jpg'; return new File([blob], `速記_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${s.order}.${ext}`, { type }); }
 const albumPending = () => slides.filter(s => s.album === 0);
-function markSaved(list) { for (const s of list) { s.album = 1; albumFiles.delete(s.id); if (!s.deleted) saveSlide(s); } renderAlbum(); }
+function markSaved(list) { for (const s of list) { s.album = 1; albumFiles.delete(s.id); idb.del('orig', s.id).catch(() => {}); if (!s.deleted) saveSlide(s); } renderAlbum(); }
 function saveToAlbum() {   // 一定要在點擊事件裡直接呼叫，iOS 才允許打開分享選單
   const list = albumPending().filter(s => albumFiles.has(s.id)); if (!list.length) return;
   const files = list.map(s => albumFiles.get(s.id));
@@ -478,8 +502,9 @@ function renderAlbum() {
   const n = cur ? albumPending().length : 0;
   $('#albumRow').hidden = !n; $('#albumInfo').textContent = `${n} 張還沒存到手機相簿`;
   $('#camClose').textContent = n ? '完成並存相簿' : '完成';
+  $('#dAlbumRow').hidden = !(curSlide && curSlide.album === 0);
 }
-function preloadAlbum() { for (const s of albumPending()) if (!albumFiles.has(s.id)) imgBlob(s.id).then(b => { if (s.album === 0) albumFiles.set(s.id, albumFile(s, b)); }).catch(() => {}); }
+function preloadAlbum() { for (const s of albumPending()) if (!albumFiles.has(s.id)) idb.get('orig', s.id).then(o => o ? new Blob([o.buf], { type: o.type }) : imgBlob(s.id)).then(b => { if (s.album === 0) albumFiles.set(s.id, albumFile(s, b)); }).catch(() => {}); }
 
 /* ---------- 筆跡：座標以圖片寬高正規化 (0–1) ---------- */
 function drawInk(x, ink, w, h) {
@@ -493,58 +518,68 @@ function drawInk(x, ink, w, h) {
     x.stroke();
   }
 }
-const pen = { on: false, color: '#E0312B', wide: false, erase: false, stroke: null, sawPen: false };
-const inkC = $('#dInk'), stage = $('#stage'), dImg = $('#dImg');
-function sizeInk() { const r = dImg.getBoundingClientRect(), d = window.devicePixelRatio || 1; if (!r.width) return; inkC.width = Math.round(r.width * d); inkC.height = Math.round(r.height * d); paintInk(); }
-function paintInk() { const x = inkC.getContext('2d'); x.clearRect(0, 0, inkC.width, inkC.height); if (curSlide) drawInk(x, pen.stroke ? [...curSlide.ink, pen.stroke] : curSlide.ink, inkC.width, inkC.height); }
-function pt(e) { const r = inkC.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; }
-function eraseAt(e) {
-  const r = inkC.getBoundingClientRect(), [px, py] = pt(e), rad = 18, n = curSlide.ink.length;
-  curSlide.ink = curSlide.ink.filter(st => !st.p.some(q => Math.hypot((q[0] - px) * r.width, (q[1] - py) * r.height) < rad));
-  if (curSlide.ink.length !== n) { pen.changed = true; paintInk(); }
+const pen = { on: false, color: '#E0312B', wide: false, erase: false, sawPen: false, last: null };
+const inkC = $('#dInk'), padC = $('#dPad'), stage = $('#stage'), dImg = $('#dImg');
+// 照片上的筆跡：x、y 各自以圖片寬、高正規化。照片旁的手寫筆記：x、y 都以寬度正規化，紙才能加長。
+function surface(canvas, key, byWidth, base, enabled) {
+  const sf = { canvas, key, stroke: null, active: null, changed: false };
+  const list = () => curSlide[key] || (curSlide[key] = []), span = r => byWidth ? r.width : r.height;
+  sf.paint = () => { const x = canvas.getContext('2d'); x.clearRect(0, 0, canvas.width, canvas.height); if (curSlide) drawInk(x, sf.stroke ? [...list(), sf.stroke] : list(), canvas.width, byWidth ? canvas.width : canvas.height); };
+  sf.size = () => { const r = canvas.getBoundingClientRect(), d = window.devicePixelRatio || 1; if (!r.width) return; canvas.width = Math.round(r.width * d); canvas.height = Math.round(r.height * d); sf.paint(); };
+  const pt = e => { const r = canvas.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(r.height / span(r), Math.max(0, (e.clientY - r.top) / span(r)))]; };
+  const erase = e => { const r = canvas.getBoundingClientRect(), [px, py] = pt(e), n = list().length; curSlide[key] = list().filter(st => !st.p.some(q => Math.hypot((q[0] - px) * r.width, (q[1] - py) * span(r)) < 18)); if (curSlide[key].length !== n) { sf.changed = true; sf.paint(); } };
+  canvas.addEventListener('pointerdown', e => {
+    if (!curSlide || !enabled()) return;
+    if (e.pointerType === 'pen') pen.sawPen = true;
+    if (e.pointerType === 'touch' && pen.sawPen) return;   // 用觸控筆時忽略手掌
+    e.preventDefault(); canvas.setPointerCapture(e.pointerId); sf.active = e.pointerId; pen.last = sf;
+    if (pen.erase) { erase(e); return; }
+    sf.stroke = { c: pen.color, w: base * (pen.wide ? 3 : 1), p: [pt(e)] }; sf.paint();
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (sf.active !== e.pointerId) return;
+    if (pen.erase) { erase(e); return; }
+    if (!sf.stroke) return;
+    for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) sf.stroke.p.push(pt(ev));
+    sf.paint();
+  });
+  const end = e => {
+    if (sf.active !== e.pointerId) return; sf.active = null;
+    if (sf.stroke) { list().push(sf.stroke); sf.stroke = null; sf.changed = true; }
+    if (sf.changed) { sf.changed = false; inkChanged(sf); }
+  };
+  canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
+  return sf;
 }
-inkC.addEventListener('pointerdown', e => {
-  if (!pen.on || !curSlide) return;
-  if (e.pointerType === 'pen') pen.sawPen = true;
-  if (e.pointerType === 'touch' && pen.sawPen) return;   // 用觸控筆時忽略手掌
-  e.preventDefault(); inkC.setPointerCapture(e.pointerId); pen.active = e.pointerId;
-  if (pen.erase) { eraseAt(e); return; }
-  pen.stroke = { c: pen.color, w: pen.wide ? 0.014 : 0.0045, p: [pt(e)] }; paintInk();
-});
-inkC.addEventListener('pointermove', e => {
-  if (pen.active !== e.pointerId) return;
-  if (pen.erase) { eraseAt(e); return; }
-  if (!pen.stroke) return;
-  for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) pen.stroke.p.push(pt(ev));
-  paintInk();
-});
-function endStroke(e) {
-  if (pen.active !== e.pointerId) return; pen.active = null;
-  if (pen.stroke) { curSlide.ink.push(pen.stroke); pen.stroke = null; pen.changed = true; }
-  if (pen.changed) { pen.changed = false; inkChanged(); }
-}
-inkC.addEventListener('pointerup', endStroke); inkC.addEventListener('pointercancel', endStroke);
-function inkChanged() {
-  const s = curSlide; paintInk();
-  if (dImg.naturalWidth) s.thumb = makeThumb(dImg, s.w, s.h, s.ink);
+const photoSf = surface(inkC, 'ink', false, 0.0045, () => pen.on), padSf = surface(padC, 'pad', true, 0.006, () => true);
+function inkChanged(sf) {
+  const s = curSlide; sf.paint();
+  if (sf === photoSf && dImg.naturalWidth) s.thumb = makeThumb(dImg, s.w, s.h, s.ink);
   s.rev = (s.rev || 0) + 1;
   if (s.ai || inflight.has(s.id)) s.dirty = s.inkDirty = true;
   saveSlide(s); paintStatus(s);
 }
-function setDraw(on) {
-  pen.on = on; stage.classList.toggle('draw', on); $('#tDraw').classList.toggle('on', on); $('#drawSet').hidden = !on;
-  $('#tDraw').textContent = on ? '手寫中（點此結束）' : '手寫';
+const hasPad = s => (s.pad || []).length > 0;
+const padExtent = s => Math.min(s.padH || 0.75, Math.max(0.25, Math.max(0, ...(s.pad || []).flatMap(st => st.p.map(q => q[1]))) + 0.06));   // 只取有寫字的高度
+function padImage(s, W = 1400, q = 0.85) {   // 手寫筆記區轉成白底圖片
+  const H = Math.round(W * padExtent(s)), c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); drawInk(x, s.pad, W, W); return c.toDataURL('image/jpeg', q);
+}
+function syncTools() {
   $$('.sw').forEach(b => b.classList.toggle('on', !pen.erase && b.dataset.c === pen.color));
   $('#tWide').classList.toggle('on', pen.wide); $('#tErase').classList.toggle('on', pen.erase);
 }
+function setDraw(on) { pen.on = on; stage.classList.toggle('draw', on); $('#tDraw').classList.toggle('on', on); $('#tDraw').textContent = on ? '在照片上畫：開' : '在照片上畫'; syncTools(); }
 $('#tDraw').onclick = () => setDraw(!pen.on);
-$$('.sw').forEach(b => b.onclick = () => { pen.color = b.dataset.c; pen.erase = false; setDraw(true); });
-$('#tWide').onclick = () => { pen.wide = !pen.wide; setDraw(true); };
-$('#tErase').onclick = () => { pen.erase = !pen.erase; setDraw(true); };
-$('#tUndo').onclick = () => { if (curSlide.ink.pop()) inkChanged(); };
-$('#tClear').onclick = () => { if (curSlide.ink.length && confirm('清除這張的所有手寫？')) { curSlide.ink = []; inkChanged(); } };
-if (window.ResizeObserver) new ResizeObserver(sizeInk).observe(dImg); else addEventListener('resize', sizeInk);
-dImg.addEventListener('load', sizeInk);
+$$('.sw').forEach(b => b.onclick = () => { pen.color = b.dataset.c; pen.erase = false; syncTools(); });
+$('#tWide').onclick = () => { pen.wide = !pen.wide; syncTools(); };
+$('#tErase').onclick = () => { pen.erase = !pen.erase; syncTools(); };
+const lastSf = () => pen.last || (curSlide.kind === 'blank' ? photoSf : padSf);   // 復原、清除作用在最後寫過的那一區
+$('#tUndo').onclick = () => { const sf = lastSf(); if ((curSlide[sf.key] || []).pop()) inkChanged(sf); };
+$('#tClear').onclick = () => { const sf = lastSf(); if ((curSlide[sf.key] || []).length && confirm(sf === photoSf ? '清除畫在照片上的筆跡？' : '清除手寫筆記區？')) { curSlide[sf.key] = []; inkChanged(sf); } };
+$('#padMore').onclick = () => { const s = curSlide; s.padH = Math.min(3, (s.padH || 0.75) + 0.5); $('#padBox').style.aspectRatio = '1 / ' + s.padH; saveSlide(s); padSf.size(); };
+if (window.ResizeObserver) { new ResizeObserver(photoSf.size).observe(dImg); new ResizeObserver(padSf.size).observe($('#padBox')); } else addEventListener('resize', () => { photoSf.size(); padSf.size(); });
+dImg.addEventListener('load', photoSf.size);
 
 /* ---------- 簡易 Markdown 轉 HTML（標題、清單、表格、粗體、引用） ---------- */
 function md(src) {
@@ -591,7 +626,7 @@ const SYS_SLIDE = `你是協助醫師在學術會議中做筆記的助理。使�
 - 數值（HR、CI、p 值、n、百分比、劑量、追蹤時間）逐字照抄。
 - 投影片上的表格用 Markdown 表格重建。圖（Kaplan-Meier curve、forest plot、流程圖等）用一兩句話說明它呈現什麼，並寫出圖上讀得到的數值。
 - 投影片上的 reference／citation 照錄。
-- 如果有第二張影像，它是同一張照片加上使用者的手繪筆跡：辨識手寫的字，並說明圈起或標示了哪個部分。
+- 影像可能不只一張，最後的文字會說明每一張是什麼。照片上的手繪筆跡：辨識手寫的字，並說明圈起或標示了哪個部分。照片旁另外手寫的筆記（白底）：辨識成文字，看不清楚的字寫〔不清楚〕。
 - 使用者的手寫與打字註記是他自己的想法，一律放在最後的「我的註記」，照原意整理，不要混進投影片內容。沒有註記就省略這一節。
 - 如果照片不是投影片（例如空白手寫頁、海報、講義），就把上面的內容整理成筆記，標題自行擬定。
 
@@ -687,11 +722,15 @@ function recognize(s) {   // 同一張同時只跑一次；重複呼叫拿到同
   const p = doRecognize(s); inflight.set(s.id, p); live.set(s.id, s); return p;
 }
 let running = 0;
-function enqueue(s) { if (!cfg.auto || !cfg.key) return; queue.push(s); live.set(s.id, s); paintStatus(s); pump(); }
+function enqueue(s) { if (!cfg.auto || !cfg.key) return; if (!queue.includes(s)) queue.push(s); live.set(s.id, s); paintStatus(s); pump(); }
+function leaveSlide(s) {   // 離開一張時：還沒有 AI 筆記，或註記有更新，就把照片連同註記送出
+  if (s.deleted || inflight.has(s.id) || (s.kind === 'blank' && !s.ink.length)) return;
+  if (!s.ai || (s.dirty && !s.edited)) enqueue(s);
+}
 function pump() {
   while (running < 2 && queue.length) {
     const s = queue.shift();
-    if (s.deleted || s.ai || inflight.has(s.id)) { if (!inflight.has(s.id)) live.delete(s.id); paintStatus(s); continue; }
+    if (s.deleted || inflight.has(s.id) || (s.ai && !s.dirty)) { if (!inflight.has(s.id)) live.delete(s.id); paintStatus(s); continue; }
     running++;
     recognize(s).then(() => { running--; if (/^API key|^找不到模型/.test(s.err)) { queue.splice(0).forEach(paintStatus); toast(s.err, 6000); } pump(); });
   }
@@ -700,11 +739,12 @@ async function doRecognize(s) {
   await null; s.err = ''; paintStatus(s);
   const rev = s.rev || 0;
   try {
-    const imgs = [];
-    if (s.kind !== 'blank') imgs.push(await b64(await imgBlob(s.id)));
-    if (s.ink.length || s.kind === 'blank') imgs.push((await composite(s)).split(',')[1]);
+    const imgs = [], what = [];
+    if (s.kind !== 'blank') { imgs.push(await b64(await imgBlob(s.id))); what.push('投影片照片'); }
+    if (s.ink.length || s.kind === 'blank') { imgs.push((await composite(s)).split(',')[1]); what.push(s.kind === 'blank' ? '空白手寫頁，內容全部是聽講者的手寫筆記' : '同一張照片，加上聽講者畫在上面的筆跡'); }
+    if (hasPad(s)) { imgs.push(padImage(s, 1600).split(',')[1]); what.push('聽講者在照片旁另外手寫的筆記（白底）'); }
     const parts = imgs.map(d => { const p = { inlineData: { mimeType: 'image/jpeg', data: d } }; if (isG3()) p.mediaResolution = { level: 'media_resolution_high' }; return p; });
-    parts.push({ text: `這是本場第 ${(slides.indexOf(s) + 1) || s.order} 張。` + (s.kind === 'blank' ? '這是一張空白手寫頁，內容全部是聽講者的手寫筆記。' : s.ink.length ? '第二張影像是加上手繪筆跡的同一張照片。' : '') + (s.text.trim() ? `\n\n聽講者的打字註記：\n${s.text.trim()}` : '') + '\n\n請依規則寫出這一張的筆記。' });
+    parts.push({ text: `這是本場第 ${(slides.indexOf(s) + 1) || s.order} 張。影像依序是：${what.map((w, i) => `${i + 1}. ${w}`).join('；')}。` + (s.text.trim() ? `\n\n聽講者的打字註記：\n${s.text.trim()}` : '') + '\n\n請依規則寫出這一張的筆記。' });
     s.ai = await gemini({ system: SYS_SLIDE, parts, level: cfg.lvSlide });
     s.aiAt = Date.now(); s.edited = false;
     if ((s.rev || 0) === rev) s.dirty = s.inkDirty = false; else s.dirty = true;   // 辨識途中又加了註記
@@ -724,7 +764,7 @@ async function recognizeAll(list) {
 }
 async function deckText() {   // 先把沒辨識的補完，再組成整場的文字
   while ($('#btnAll').disabled) await sleep(300);
-  const todo = slides.filter(s => !s.ai || (s.inkDirty && !s.edited));   // 沒辨識的，以及辨識後又加了手寫的
+  const todo = slides.filter(s => !s.ai || (s.dirty && !s.edited));   // 沒有 AI 筆記的，以及之後又加了註記的
   if (todo.length) await recognizeAll(todo);
   if (!slides.some(s => s.ai || s.text.trim())) throw new Error('沒有任何一張辨識成功：' + ((slides.find(s => s.err) || {}).err || ''));
   let t = `演講題目：${cur.title || '（未填）'}\n講者：${cur.speaker || '（未填）'}\n會議：${cur.event || '（未填）'}\n日期：${fmtDate(cur.createdAt).slice(0, 10)}\n投影片張數：${slides.length}\n`;
@@ -770,7 +810,7 @@ function statusOf(s) {
   if (queue.includes(s)) return ['busy', '排隊等 AI 辨識…'];
   if (s.err) return ['err', '辨識失敗：' + s.err];
   if (!s.ai) return ['', ''];
-  if (s.dirty) return ['', '註記有更新，重新辨識才會納入'];
+  if (s.dirty) return ['', s.edited ? '註記有更新（AI 筆記已手動修改，不會自動重新生成）' : '註記有更新，AI 筆記尚未重新生成'];
   return ['', ''];
 }
 function rowInner(s, i) {
@@ -836,7 +876,7 @@ async function loadSession(s) {
 function showSession() { curSlide = null; setDraw(false); renderSlides(); renderSum(); show('v-sess'); fitTitle(); scrollTo(0, sessScroll); if (pendingCam) { pendingCam = false; openCam(); } }
 async function showSlide(s) {
   if ($('#v-sess').classList.contains('on')) sessScroll = scrollY;
-  curSlide = s; pen.stroke = null;
+  curSlide = s; pen.last = null; photoSf.stroke = padSf.stroke = null;
   const i = slides.indexOf(s);
   $('#dBack').href = '#/s/' + cur.id; $('#dPos').textContent = `第 ${i + 1} 張／共 ${slides.length} 張`;
   $('#dText').value = s.text; $('#dPrev').disabled = i === 0; $('#dNext').disabled = i === slides.length - 1;
@@ -844,17 +884,19 @@ async function showSlide(s) {
   $('#dAiEdit').hidden = true; $('#dAi').hidden = false; $('#dEditAi').textContent = '編輯';
   dImg.src = await imgURL(s.id);
   setDraw(s.kind === 'blank' && !s.ai);
-  renderDetailAi(); show('v-slide'); scrollTo(0, 0);
+  $('#padWrap').hidden = s.kind === 'blank'; $('#padBox').style.aspectRatio = '1 / ' + (s.padH || 0.75);
+  renderDetailAi(); renderAlbum(); show('v-slide'); padSf.size(); scrollTo(0, 0);
 }
 function renderDetailAi() {
   const s = curSlide, [cls, st] = statusOf(s), b = inflight.has(s.id);
-  $('#dStatus').textContent = st || (s.ai ? 'AI 筆記　' + fmtDate(s.aiAt) : '還沒辨識。可以先寫註記，辨識時會一起整理。');
+  $('#dStatus').textContent = st || (s.ai ? 'AI 筆記　' + fmtDate(s.aiAt) : cfg.auto && cfg.key ? '先寫註記；離開這一張時會連同註記送 AI 生成筆記。' : '寫好註記後按「AI 生成筆記」。');
   $('#dStatus').className = cls === 'err' ? 'st err' : cls === 'busy' ? 'st busy' : '';
-  $('#dAiBtn').disabled = b; $('#dAiBtn').textContent = b ? '辨識中…' : s.ai ? '重新辨識' : 'AI 辨識';
+  $('#dAiBtn').disabled = b; $('#dAiBtn').textContent = b ? '生成中…' : s.ai ? '重新生成' : 'AI 生成筆記';
   $('#dEditAi').hidden = !s.ai;
   if ($('#dAiEdit').hidden) $('#dAi').innerHTML = md(s.ai);
 }
-async function route() {
+async function route() { const prev = curSlide; await route0(); if (prev && prev !== curSlide) leaveSlide(prev); }
+async function route0() {
   const m = location.hash.match(/^#\/s\/([^/]+)(?:\/([^/]+))?/);
   if (!m) return showHome();
   if (!cur || cur.id !== m[1]) { const s = await idb.get('sessions', m[1]); if (!s) { location.hash = '#/'; return; } await loadSession(s); }
@@ -866,7 +908,8 @@ addEventListener('hashchange', route);
 /* ---------- 場次操作 ---------- */
 const newSession = async () => { const s = { id: uid(), title: '', speaker: '', event: '', createdAt: Date.now(), updatedAt: Date.now(), n: 0, summary: '' }; await idb.put('sessions', s); return s; };
 $('#btnNew').onclick = async () => { location.hash = '#/s/' + (await newSession()).id; };
-$('#btnQuick').onclick = async () => { const s = quickTarget || await newSession(); pendingCam = true; location.hash = '#/s/' + s.id; };
+$('#btnQuick').onclick = async () => { if (cfg.camera === 'system') $('#fNative').click(); else pendingCam = true;   // 內建相機要在點擊當下就叫出來
+  const s = quickTarget || await newSession(); location.hash = '#/s/' + s.id; };
 $('#btnAlbum').onclick = saveToAlbum;
 $('#btnAlbumSkip').onclick = () => markSaved(albumPending());
 let metaT; const fitTitle = () => { const t = $('#mTitle'); t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; };
@@ -889,7 +932,9 @@ $('#btnQEdit').onclick = async () => {
 $('#qFocus').oninput = () => { cur.qFocus = $('#qFocus').value; clearTimeout(metaT); metaT = setTimeout(saveSession, 400); };
 $('#btnLib').onclick = () => $('#fLib').click();
 $('#fLib').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; toast(`加入 ${f.length} 張…`); await addFiles(f, 'lib'); renderSlides(); renderSum(); };
-$('#fNative').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; const s = await addFiles(f, 'cam'); renderSlides(); if (s) toast(`已存為第 ${slides.length} 張`); };
+$('#fNative').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; while (!cur) await sleep(50);   // 從首頁直接叫出內建相機時，場次可能還在開
+  const note = cfg.after === 'note' && f.length === 1, s = await addFiles(f, 'cam', note); renderSlides();
+  if (s && note) location.hash = `#/s/${cur.id}/${s.id}`; else if (s) toast(`已存為第 ${slides.length} 張`); };
 $('#btnBlank').onclick = async () => { const c = document.createElement('canvas'); c.width = 1600; c.height = 1200; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 1600, 1200); const s = await addSlide(c, 0, 0, 1600, 1200, 'blank'); pen.color = '#111111'; pen.erase = false; location.hash = `#/s/${cur.id}/${s.id}`; };
 
 /* ---------- 單張操作 ---------- */
@@ -906,17 +951,18 @@ async function move(d) { const i = slides.indexOf(curSlide), j = i + d; if (j < 
 $('#dUp').onclick = () => move(-1); $('#dDown').onclick = () => move(1);
 $('#dDel').onclick = async () => {
   if (!confirm('刪除這張照片和它的註記？')) return;
-  const s = curSlide, i = slides.indexOf(s); slides.splice(i, 1); s.deleted = true; albumFiles.delete(s.id);
+  const s = curSlide, i = slides.indexOf(s); slides.splice(i, 1); s.deleted = true; albumFiles.delete(s.id); idb.del('orig', s.id).catch(() => {});
   await idb.del('slides', s.id); await idb.del('images', s.id); await saveSession();
   if (urls.has(s.id)) { URL.revokeObjectURL(urls.get(s.id)); urls.delete(s.id); }
   const n = slides[i] || slides[i - 1]; location.replace(n ? `#/s/${cur.id}/${n.id}` : `#/s/${cur.id}`);
 };
-$('#dShoot').onclick = () => { location.hash = '#/s/' + cur.id; openCam(); };
+$('#dShoot').onclick = () => { if (cfg.camera === 'system') { $('#fNative').click(); return; } location.hash = '#/s/' + cur.id; openCam(); };
+$('#dAlbum').onclick = saveToAlbum;
 
 /* ---------- 相機（連拍） ---------- */
 const cam = { stream: null, track: null, hw: null, zoom: 1, last: null, n: 0 }, video = $('#camVideo');
 async function openCam() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('#fNative').click(); return; }
+  if (cfg.camera === 'system' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('#fNative').click(); return; }
   try { cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } } }); }
   catch (e) { toast(e.name === 'NotAllowedError' ? '相機權限被拒絕，改用系統相機' : '開不了相機，改用系統相機'); $('#fNative').click(); return; }
   video.srcObject = cam.stream; cam.track = cam.stream.getVideoTracks()[0];
@@ -937,7 +983,11 @@ $('#camShoot').onclick = async () => {
   if (!cam.hw && cam.zoom > 1) { sw = vw / cam.zoom; sh = vh / cam.zoom; sx = (vw - sw) / 2; sy = (vh - sh) / 2; }
   const f = $('#camFlash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
   if (navigator.vibrate) navigator.vibrate(15);
-  try { cam.last = await addSlide(video, sx, sy, sw, sh, 'photo', 'cam'); } catch (e) { return; }
+  const c = document.createElement('canvas'); c.width = Math.round(sw); c.height = Math.round(sh);   // 先定格成一張原始解析度的畫面
+  c.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  const note = cfg.after === 'note', orig = cfg.album && (IOS || ANDROID) ? await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95)) : null;
+  try { cam.last = await addSlide(c, 0, 0, c.width, c.height, 'photo', { from: 'cam', orig, hold: note }); } catch (e) { return; }
+  if (note) { const s = cam.last; closeCam(); location.hash = `#/s/${cur.id}/${s.id}`; return; }
   cam.n++; camCount();
   $('#camLast').style.backgroundImage = `url(${cam.last.thumb})`; $('#camLast').hidden = false; $('#camNote').hidden = false;
 };
@@ -952,12 +1002,12 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && cam
 const dlgS = $('#dlgSettings'), dlgX = $('#dlgExport');
 const openDlg = d => d.showModal ? d.showModal() : d.setAttribute('open', ''), closeDlg = d => d.close ? d.close() : d.removeAttribute('open');
 async function openSettings() {
-  $('#cKey').value = cfg.key; $('#cModel').value = cfg.model; $('#cLvSlide').value = cfg.lvSlide; $('#cLvSum').value = cfg.lvSum; $('#cLvQ').value = cfg.lvQ; $('#cIntro').value = cfg.intro; $('#cExtra').value = cfg.extra; $('#cAuto').checked = cfg.auto; $('#cAlbum').checked = cfg.album;
+  $('#cKey').value = cfg.key; $('#cModel').value = cfg.model; $('#cLvSlide').value = cfg.lvSlide; $('#cLvSum').value = cfg.lvSum; $('#cLvQ').value = cfg.lvQ; $('#cIntro').value = cfg.intro; $('#cExtra').value = cfg.extra; $('#cAuto').checked = cfg.auto; $('#cAlbum').checked = cfg.album; $('#cAfter').value = cfg.after; $('#cCamera').value = cfg.camera;
   $('#cStore').textContent = '';
   if (navigator.storage && navigator.storage.estimate) { try { const e = await navigator.storage.estimate(); $('#cStore').textContent = `照片存在這台裝置的瀏覽器裡，目前用了 ${(e.usage / 1048576).toFixed(1)} MB。清除瀏覽器網站資料會一併刪掉，重要的場次請先匯出。`; } catch (e) {} }
   openDlg(dlgS);
 }
-function readCfg() { cfg.key = $('#cKey').value.trim(); cfg.model = $('#cModel').value.trim() || CFG_DEFAULT.model; cfg.lvSlide = $('#cLvSlide').value; cfg.lvSum = $('#cLvSum').value; cfg.lvQ = $('#cLvQ').value; cfg.intro = $('#cIntro').value.trim(); cfg.extra = $('#cExtra').value; cfg.auto = $('#cAuto').checked; cfg.album = $('#cAlbum').checked; }
+function readCfg() { cfg.key = $('#cKey').value.trim(); cfg.model = $('#cModel').value.trim() || CFG_DEFAULT.model; cfg.lvSlide = $('#cLvSlide').value; cfg.lvSum = $('#cLvSum').value; cfg.lvQ = $('#cLvQ').value; cfg.intro = $('#cIntro').value.trim(); cfg.extra = $('#cExtra').value; cfg.auto = $('#cAuto').checked; cfg.album = $('#cAlbum').checked; cfg.after = $('#cAfter').value; cfg.camera = $('#cCamera').value; }
 $('#btnSettings').onclick = openSettings; $('#btnKeyGo').onclick = openSettings;
 $('#cCancel').onclick = () => { try { Object.assign(cfg, CFG_DEFAULT, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {} closeDlg(dlgS); };
 $('#cSave').onclick = () => { readCfg(); saveCfg(); closeDlg(dlgS); $('#keyWarn').hidden = !!cfg.key; toast('設定已儲存'); };
@@ -986,7 +1036,7 @@ async function exportBody(imgMax) {   // 離線 HTML 與 PDF 共用：彙整、�
   let body = cur.summary ? md(cur.summary) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`;
   if (cur.questions) body += '<h1 class="part">可以提問的問題</h1>' + md(cur.questions);
   if (slides.length) body += '<h1 class="part">逐張筆記</h1>';
-  for (let i = 0; i < slides.length; i++) { const s = slides[i]; body += `<section><div class="ph"><p class="n">S${i + 1}</p><img src="${await composite(s, imgMax, 0.8)}" alt="S${i + 1}"></div>${md(s.ai)}${s.text.trim() ? `<blockquote>打字註記：${esc(s.text.trim()).replace(/\n/g, '<br>')}</blockquote>` : ''}</section>`; }
+  for (let i = 0; i < slides.length; i++) { const s = slides[i]; body += `<section><div class="ph"><p class="n">S${i + 1}</p><img src="${await composite(s, imgMax, 0.8)}" alt="S${i + 1}"></div>${hasPad(s) ? `<img class="padimg" src="${padImage(s)}" alt="S${i + 1} 手寫筆記">` : ''}${md(s.ai)}${s.text.trim() ? `<blockquote>打字註記：${esc(s.text.trim()).replace(/\n/g, '<br>')}</blockquote>` : ''}</section>`; }
   return body;
 }
 $('#xHtml').onclick = async () => {
@@ -1127,9 +1177,14 @@ async function buildPptx() {
     const notes = [plainText(s.ai).replace(/^#{1,4}\s+/gm, '').replace(/^(\s*)[-*+]\s+/gm, '$1• '), typed ? '打字註記：' + typed : ''].filter(Boolean).join('\n\n');
     const f = fitPages(text, [18, 16, 14, 12], TW, PP.BH), sl = page(title, notes);
     if (f.pages[0]) body(sl, f.pages[0], f.pt, TW);
-    const ar = s.w / s.h, w = Math.min(IW, PP.BH * ar), h = w / ar;
+    const pad = hasPad(s), ar = s.w / s.h, w = Math.min(IW, (pad ? PP.BH * 0.58 : PP.BH) * ar), h = w / ar;
     sl.addImage({ data: (await composite(s, 1600, 0.82)).replace(/^data:/, ''), x: IX + (IW - w), y: PP.BY, w, h, altText: `S${i + 1} 投影片照片` });
     sl.addShape(pres.ShapeType.rect, { x: IX + (IW - w), y: PP.BY, w, h, fill: { type: 'none' }, line: { color: PP.RULE, width: 0.75 } });
+    if (pad) {   // 手寫筆記放在照片下方
+      const py = PP.BY + h + 0.15, par = 1 / padExtent(s), pw = Math.min(IW, (PP.BY + PP.BH - py) * par), ph = pw / par;
+      sl.addImage({ data: padImage(s, 1400).replace(/^data:/, ''), x: IX + (IW - pw), y: py, w: pw, h: ph, altText: `S${i + 1} 手寫筆記` });
+      sl.addShape(pres.ShapeType.rect, { x: IX + (IW - pw), y: py, w: pw, h: ph, fill: { type: 'none' }, line: { color: PP.RULE, width: 0.75 } });
+    }
     const rest = f.pages.slice(1).flat(); if (rest.length) paginate(rest, 14, PP.BW, PP.BH).forEach(pg => body(page(title + '（續）', notes), pg, 14, PP.BW));
     tables.forEach(tb => tableSlides(title + '（表格）', tb, notes));
   }
@@ -1151,7 +1206,7 @@ $('#xPptx').onclick = async () => {
 };
 $('#xDel').onclick = async () => {
   if (!confirm(`刪除「${cur.title || '未命名場次'}」和裡面 ${slides.length} 張照片？無法復原。`)) return;
-  for (const s of slides) { s.deleted = true; albumFiles.delete(s.id); await idb.del('slides', s.id); await idb.del('images', s.id); }
+  for (const s of slides) { s.deleted = true; albumFiles.delete(s.id); await idb.del('slides', s.id); await idb.del('images', s.id); await idb.del('orig', s.id); }
   await idb.del('sessions', cur.id); closeDlg(dlgX); location.hash = '#/';
 };
 
