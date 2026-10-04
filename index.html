@@ -51,6 +51,8 @@ button{cursor:pointer}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .row2 input{font-size:.95rem}
 
+.line{width:100%;background:none;border:0;border-bottom:1px solid var(--rule);padding:12px 0 8px;border-radius:0}
+.line::placeholder{color:var(--ink2);opacity:.75}
 .tabs{display:flex;gap:22px;margin:18px 0 0;border-bottom:1px solid var(--rule)}
 .tabs button{background:none;border:0;padding:10px 0;min-height:44px;color:var(--ink2);border-bottom:3px solid transparent;margin-bottom:-1px}
 .tabs button.on{color:var(--ink);font-weight:700;border-bottom-color:var(--hl)}
@@ -100,6 +102,7 @@ textarea{width:100%;background:var(--sheet);border:1px solid var(--rule);border-
 
 /* AI 筆記的排版 */
 .note{max-width:40em}
+#qView p{font-size:1.08rem;line-height:1.7;margin:.6em 0}
 .note h1{font:700 1.45rem/1.3 var(--serif);margin:.9em 0 .3em}
 .note h2{font:700 1.2rem/1.45 var(--serif);margin:1.3em 0 .4em}
 .note h2 span{background:linear-gradient(transparent 62%,var(--hl-soft) 62%);padding:0 2px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
@@ -179,7 +182,7 @@ dialog a{color:var(--pen)}
       <input id="mTitle" placeholder="演講題目" autocomplete="off">
       <div class="row2"><input id="mSpeaker" placeholder="講者" autocomplete="off"><input id="mEvent" placeholder="會議／場合" autocomplete="off"></div>
     </div>
-    <nav class="tabs"><button data-tab="slides" class="on" id="tabSlides">投影片</button><button data-tab="sum">演講筆記</button></nav>
+    <nav class="tabs"><button data-tab="slides" class="on" id="tabSlides">投影片</button><button data-tab="sum">演講筆記</button><button data-tab="q">提問</button></nav>
 
     <div id="tab-slides">
       <div class="batch" id="batchRow" hidden><span id="batchInfo"></span><button class="btn" id="btnAll">辨識全部</button></div>
@@ -192,6 +195,14 @@ dialog a{color:var(--pen)}
       <div class="note" id="sumView"></div>
       <textarea id="sumEdit" rows="24" hidden></textarea>
       <div class="empty" id="sumEmpty">拍完之後按「彙整演講筆記」。還沒辨識的照片會先自動辨識，再依主題整理成一份筆記。</div>
+    </div>
+
+    <div id="tab-q" hidden>
+      <input class="line" id="qFocus" placeholder="想問的方向（選填），例如：病人選擇、毒性處理" autocomplete="off" aria-label="想問的方向">
+      <div class="batch"><span id="qInfo"></span><span><button class="btn" id="btnQEdit" hidden>編輯</button> <button class="btn primary" id="btnQ">擬出提問</button></span></div>
+      <div class="note" id="qView"></div>
+      <textarea id="qEdit" rows="24" hidden></textarea>
+      <div class="empty" id="qEmpty">依這一場的投影片和你的註記，擬出 Q&amp;A 可以舉手問的問題。每題有中文和英文兩版，都是可以照著念的完整句子。演講還沒結束也可以先擬，拍到新的投影片再重擬。</div>
     </div>
 
     <div class="bar"><div class="three">
@@ -254,7 +265,11 @@ dialog a{color:var(--pen)}
   <div class="row2">
     <div><label class="f" for="cLvSlide">單張辨識的思考深度</label><select id="cLvSlide"><option value="low">low（快）</option><option value="medium">medium</option><option value="high">high（慢）</option></select></div>
     <div><label class="f" for="cLvSum">彙整筆記的思考深度</label><select id="cLvSum"><option value="low">low（快）</option><option value="medium">medium</option><option value="high">high（慢）</option></select></div>
+    <div><label class="f" for="cLvQ">擬提問的思考深度</label><select id="cLvQ"><option value="low">low（快）</option><option value="medium">medium</option><option value="high">high（慢）</option></select></div>
   </div>
+  <label class="f" for="cIntro">提問開場的自我介紹（選填）</label>
+  <input type="text" id="cIntro" autocomplete="off" placeholder="姓名、醫院、國家，中英文都可以">
+  <small>有填的話，提問的開場白會帶上這句自我介紹；沒填就只有一句感謝。</small>
   <label class="f" for="cExtra">彙整時的額外要求（選填）</label>
   <textarea id="cExtra" rows="3" placeholder="例如：最後加一段「對本科臨床的影響」；表格優先。"></textarea>
   <small id="cStore"></small>
@@ -288,7 +303,7 @@ let toastT;
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
 
 /* ---------- 設定 ---------- */
-const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', extra: '' };
+const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', lvQ: 'medium', intro: '', extra: '' };
 let cfg = { ...CFG_DEFAULT };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {}
 function saveCfg() { try { localStorage.setItem('snapnote.cfg', JSON.stringify(cfg)); } catch (e) { toast('這個瀏覽器不允許儲存設定（可能是無痕模式）'); } }
@@ -509,6 +524,28 @@ const SYS_SUM = `你是協助醫師整理學術演講筆記的助理。以下是
 ## 待查證
 ## 提及的文獻`;
 
+const SYS_Q = `你是協助醫師在學術會議 Q&A 時段提問的助理。以下是同一場演講逐張投影片的筆記，依拍攝順序編號為 S1、S2…。其中「我的註記」與〔聽講者打字註記〕是聽講者本人的想法與疑問。請擬出聽講者可以舉手提問的問題。
+
+規則：
+- 擬 6 題，依「最值得問」排序。聽講者註記裡出現的疑問排最前面，改寫成得體的提問。
+- 題目類型要分散：研究設計或方法的限制、數據的解讀（例如 subgroup、追蹤時間、endpoint 的選擇）、臨床應用（病人選擇、實際做法、毒性處理）、與其他研究或現行做法的比較、未來方向。
+- 每一題都要扣住投影片上的具體內容。不要問投影片上已經回答的事；不要引用投影片沒有的數據，也不要把投影片沒寫的事當成事實；筆記裡標〔不清楚〕的數字不要拿來引用。
+- 語氣是同行之間就事論事的請教，不過度恭維，也不咄咄逼人。
+- 每一題都給中文與英文兩個版本，意思一致，而且都是可以直接照著念出來的完整句子：先用一句話交代問題的背景，再提問。每題 2–3 句。
+- 英文是給非母語者在現場照念的：句子短、用字常見、好發音，不要長子句或艱澀的片語；專有名詞、藥名、試驗名稱照投影片原文。
+- 中文用繁體中文，英文專有名詞保留原文。
+- 開場白只寫一次，每一題本身不要再重複感謝。
+
+輸出格式（Markdown），不要前言或結語：
+## 開場白
+**中文**：…
+**English**: …
+## Q1　一句話主題（S3、S5）
+**中文**：…
+**English**: …
+*為什麼問*：一句話說明這題的依據（中文）
+## Q2　…`;
+
 const isG3 = () => /^gemini-3/.test(cfg.model);
 function haveKey() { if (cfg.key) return true; toast('請先設定 Gemini API key'); openSettings(); return false; }
 async function gemini({ system, parts, level }) {
@@ -562,31 +599,50 @@ async function recognize(s) {
 async function recognizeAll(list) {
   let i = 0, done = 0; const n = list.length;
   $('#btnAll').disabled = true;
-  const info = () => { $('#batchInfo').textContent = `辨識中 ${done}/${n}…`; $('#sumInfo').textContent = `先辨識照片 ${done}/${n}…`; };
+  const info = () => { $('#batchInfo').textContent = `辨識中 ${done}/${n}…`; $('#sumInfo').textContent = $('#qInfo').textContent = `先辨識照片 ${done}/${n}…`; };
   info();
   const worker = async () => { while (i < list.length) { const s = list[i++]; await recognize(s); done++; info(); } };
   await Promise.all([worker(), worker()]);
   $('#btnAll').disabled = false; renderSlides(); renderSum();
+}
+async function deckText() {   // 先把沒辨識的補完，再組成整場的文字
+  while ($('#btnAll').disabled) await sleep(300);
+  const todo = slides.filter(s => !s.ai);
+  if (todo.length) await recognizeAll(todo);
+  if (!slides.some(s => s.ai || s.text.trim())) throw new Error('沒有任何一張辨識成功：' + ((slides.find(s => s.err) || {}).err || ''));
+  let t = `演講題目：${cur.title || '（未填）'}\n講者：${cur.speaker || '（未填）'}\n會議：${cur.event || '（未填）'}\n日期：${fmtDate(cur.createdAt).slice(0, 10)}\n投影片張數：${slides.length}\n`;
+  slides.forEach((s, i) => { t += `\n===== S${i + 1} =====\n${s.ai || '（這張沒有辨識結果）'}\n`; if (s.text.trim()) t += `〔聽講者打字註記〕${s.text.trim()}\n`; });
+  return { t, failed: slides.filter(s => !s.ai).length };
 }
 async function summarize() {
   if (!slides.length) { toast('這一場還沒有照片'); return; }
   if (!haveKey()) return;
   const btn = $('#btnSum'); btn.disabled = true;
   try {
-    const todo = slides.filter(s => !s.ai);
-    if (todo.length) await recognizeAll(todo);
-    const usable = slides.filter(s => s.ai || s.text.trim());
-    if (!usable.length) throw new Error('沒有任何一張辨識成功：' + (slides.find(s => s.err) || {}).err);
+    const { t, failed } = await deckText();
     $('#sumInfo').textContent = '彙整中，通常要半分鐘到一分鐘…';
-    const failed = slides.filter(s => !s.ai).length;
-    let t = `演講題目：${cur.title || '（未填）'}\n講者：${cur.speaker || '（未填）'}\n會議：${cur.event || '（未填）'}\n日期：${fmtDate(cur.createdAt).slice(0, 10)}\n投影片張數：${slides.length}\n`;
-    slides.forEach((s, i) => { t += `\n===== S${i + 1} =====\n${s.ai || '（這張沒有辨識結果）'}\n`; if (s.text.trim()) t += `〔聽講者打字註記〕${s.text.trim()}\n`; });
-    t += '\n以上是全部投影片的筆記。請依規則彙整成一份演講筆記。' + (cfg.extra.trim() ? '\n\n聽講者的額外要求：' + cfg.extra.trim() : '');
-    cur.summary = await gemini({ system: SYS_SUM, parts: [{ text: t }], level: cfg.lvSum });
+    const p = t + '\n以上是全部投影片的筆記。請依規則彙整成一份演講筆記。' + (cfg.extra.trim() ? '\n\n聽講者的額外要求：' + cfg.extra.trim() : '');
+    cur.summary = await gemini({ system: SYS_SUM, parts: [{ text: p }], level: cfg.lvSum });
     cur.summaryAt = Date.now(); cur.summaryN = slides.length; await saveSession();
     if (failed) toast(`有 ${failed} 張沒辨識成功，未納入彙整`, 4500);
   } catch (e) { toast(e.message || String(e), 5000); }
   btn.disabled = false; renderSum();
+}
+async function askQuestions() {
+  if (!slides.length) { toast('這一場還沒有照片'); return; }
+  if (!haveKey()) return;
+  const btn = $('#btnQ'); btn.disabled = true;
+  try {
+    const { t, failed } = await deckText();
+    $('#qInfo').textContent = '擬題中…';
+    let p = t + '\n以上是目前拍到的全部投影片筆記。請依規則擬出可以在 Q&A 提問的問題。';
+    if ((cur.qFocus || '').trim()) p += '\n\n聽講者想問的方向（優先往這裡出題）：' + cur.qFocus.trim();
+    p += cfg.intro.trim() ? '\n\n開場白請帶上這句自我介紹（中英文版各自用合適的說法）：' + cfg.intro.trim() : '\n\n聽講者沒有提供自我介紹，開場白只要一句感謝，不要自我介紹，也不要留空格讓人填。';
+    cur.questions = await gemini({ system: SYS_Q, parts: [{ text: p }], level: cfg.lvQ });
+    cur.questionsAt = Date.now(); cur.questionsN = slides.length; await saveSession();
+    if (failed) toast(`有 ${failed} 張沒辨識成功，未納入出題`, 4500);
+  } catch (e) { toast(e.message || String(e), 5000); }
+  btn.disabled = false; renderQ();
 }
 
 /* ---------- 畫面 ---------- */
@@ -617,7 +673,16 @@ function paintStatus(s) {
   const a = $(`#slideList a[data-id="${s.id}"]`); if (a) a.innerHTML = rowInner(s, slides.indexOf(s));
   if (curSlide === s && $('#v-slide').classList.contains('on')) renderDetailAi();
 }
+function renderQ() {
+  const has = !!(cur && cur.questions), editing = !$('#qEdit').hidden;
+  $('#qEmpty').hidden = has; $('#btnQEdit').hidden = !has;
+  $('#btnQ').textContent = has ? '重新擬題' : '擬出提問';
+  if (!editing) $('#qView').innerHTML = has ? md(cur.questions) : '';
+  if ($('#btnQ').disabled) return;
+  $('#qInfo').textContent = has ? `${fmtDate(cur.questionsAt)} 擬題` + (cur.questionsN !== slides.length ? `（當時 ${cur.questionsN} 張，現在 ${slides.length} 張）` : '') : '';
+}
 function renderSum() {
+  renderQ();
   const has = !!(cur && cur.summary), editing = !$('#sumEdit').hidden;
   $('#sumEmpty').hidden = has; $('#btnSumEdit').hidden = !has;
   $('#btnSum').textContent = has ? '重新彙整' : '彙整演講筆記';
@@ -625,13 +690,13 @@ function renderSum() {
   if ($('#btnSum').disabled) return;
   $('#sumInfo').textContent = has ? `${fmtDate(cur.summaryAt)} 彙整` + (cur.summaryN !== slides.length ? `（當時 ${cur.summaryN} 張，現在 ${slides.length} 張）` : '') : '';
 }
-function setTab(t) { tab = t; $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); $('#tab-slides').hidden = t !== 'slides'; $('#tab-sum').hidden = t !== 'sum'; }
+function setTab(t) { tab = t; $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); $('#tab-slides').hidden = t !== 'slides'; $('#tab-sum').hidden = t !== 'sum'; $('#tab-q').hidden = t !== 'q'; }
 $$('.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 
 async function showHome() {
   cur = null; slides = []; curSlide = null; urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
   const list = (await idb.all('sessions')).sort((a, b) => b.createdAt - a.createdAt);
-  $('#sessList').innerHTML = list.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.title || '未命名場次')}</b><span>${esc([fmtDate(s.createdAt), s.speaker, s.event, (s.n || 0) + ' 張', s.summary ? '已彙整' : ''].filter(Boolean).join('　'))}</span></a></li>`).join('');
+  $('#sessList').innerHTML = list.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.title || '未命名場次')}</b><span>${esc([fmtDate(s.createdAt), s.speaker, s.event, (s.n || 0) + ' 張', s.summary ? '已彙整' : '', s.questions ? '已擬提問' : ''].filter(Boolean).join('　'))}</span></a></li>`).join('');
   $('#homeEmpty').hidden = list.length > 0; $('#sessList').hidden = !list.length;
   $('#keyWarn').hidden = !!cfg.key;
   show('v-home'); scrollTo(0, 0);
@@ -640,6 +705,7 @@ async function loadSession(s) {
   cur = s; slides = (await idb.bySid(s.id)).sort((a, b) => a.order - b.order);
   $('#mTitle').value = s.title || ''; $('#mSpeaker').value = s.speaker || ''; $('#mEvent').value = s.event || '';
   $('#sumEdit').hidden = true; $('#sumView').hidden = false; $('#btnSumEdit').textContent = '編輯';
+  $('#qEdit').hidden = true; $('#qView').hidden = false; $('#btnQEdit').textContent = '編輯'; $('#qFocus').value = s.qFocus || '';
   setTab('slides'); sessScroll = 0;
 }
 function showSession() { curSlide = null; setDraw(false); renderSlides(); renderSum(); show('v-sess'); scrollTo(0, sessScroll); }
@@ -683,6 +749,13 @@ $('#btnSumEdit').onclick = async () => {
   if (ed.hidden) { ed.value = cur.summary; ed.hidden = false; $('#sumView').hidden = true; $('#btnSumEdit').textContent = '完成編輯'; }
   else { cur.summary = ed.value; await saveSession(); ed.hidden = true; $('#sumView').hidden = false; $('#btnSumEdit').textContent = '編輯'; renderSum(); }
 };
+$('#btnQ').onclick = () => { if (cur.questions && !confirm('重新擬題會覆蓋目前的提問（含手動修改）。繼續？')) return; $('#qEdit').hidden = true; $('#qView').hidden = false; $('#btnQEdit').textContent = '編輯'; askQuestions(); };
+$('#btnQEdit').onclick = async () => {
+  const ed = $('#qEdit');
+  if (ed.hidden) { ed.value = cur.questions; ed.hidden = false; $('#qView').hidden = true; $('#btnQEdit').textContent = '完成編輯'; }
+  else { cur.questions = ed.value; await saveSession(); ed.hidden = true; $('#qView').hidden = false; $('#btnQEdit').textContent = '編輯'; renderQ(); }
+};
+$('#qFocus').oninput = () => { cur.qFocus = $('#qFocus').value; clearTimeout(metaT); metaT = setTimeout(saveSession, 400); };
 $('#btnLib').onclick = () => $('#fLib').click();
 $('#fLib').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; toast(`加入 ${f.length} 張…`); await addFiles(f); renderSlides(); renderSum(); };
 $('#fNative').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (!f.length) return; const s = await addFiles(f); renderSlides(); if (s) toast(`已存為第 ${slides.length} 張`); };
@@ -748,12 +821,12 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && cam
 const dlgS = $('#dlgSettings'), dlgX = $('#dlgExport');
 const openDlg = d => d.showModal ? d.showModal() : d.setAttribute('open', ''), closeDlg = d => d.close ? d.close() : d.removeAttribute('open');
 async function openSettings() {
-  $('#cKey').value = cfg.key; $('#cModel').value = cfg.model; $('#cLvSlide').value = cfg.lvSlide; $('#cLvSum').value = cfg.lvSum; $('#cExtra').value = cfg.extra;
+  $('#cKey').value = cfg.key; $('#cModel').value = cfg.model; $('#cLvSlide').value = cfg.lvSlide; $('#cLvSum').value = cfg.lvSum; $('#cLvQ').value = cfg.lvQ; $('#cIntro').value = cfg.intro; $('#cExtra').value = cfg.extra;
   $('#cStore').textContent = '';
   if (navigator.storage && navigator.storage.estimate) { try { const e = await navigator.storage.estimate(); $('#cStore').textContent = `照片存在這台裝置的瀏覽器裡，目前用了 ${(e.usage / 1048576).toFixed(1)} MB。清除瀏覽器網站資料會一併刪掉，重要的場次請先匯出。`; } catch (e) {} }
   openDlg(dlgS);
 }
-function readCfg() { cfg.key = $('#cKey').value.trim(); cfg.model = $('#cModel').value.trim() || CFG_DEFAULT.model; cfg.lvSlide = $('#cLvSlide').value; cfg.lvSum = $('#cLvSum').value; cfg.extra = $('#cExtra').value; }
+function readCfg() { cfg.key = $('#cKey').value.trim(); cfg.model = $('#cModel').value.trim() || CFG_DEFAULT.model; cfg.lvSlide = $('#cLvSlide').value; cfg.lvSum = $('#cLvSum').value; cfg.lvQ = $('#cLvQ').value; cfg.intro = $('#cIntro').value.trim(); cfg.extra = $('#cExtra').value; }
 $('#btnSettings').onclick = openSettings; $('#btnKeyGo').onclick = openSettings;
 $('#cCancel').onclick = () => { try { Object.assign(cfg, CFG_DEFAULT, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {} closeDlg(dlgS); };
 $('#cSave').onclick = () => { readCfg(); saveCfg(); closeDlg(dlgS); $('#keyWarn').hidden = !!cfg.key; toast('設定已儲存'); };
@@ -768,6 +841,7 @@ $('#cTest').onclick = async () => {
 /* ---------- 匯出 ---------- */
 function exportMd() {
   let t = cur.summary ? cur.summary.trim() + '\n' : `# ${cur.title || '未命名場次'}\n\n${[cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜')}\n`;
+  if (cur.questions) t += '\n---\n\n# 可以提問的問題\n\n' + cur.questions.trim() + '\n';
   t += '\n---\n\n# 逐張筆記\n';
   slides.forEach((s, i) => { t += `\n### S${i + 1}\n\n${(s.ai || '（未辨識）').replace(/^(#{1,3})\s/gm, '#### ')}\n`; if (s.text.trim()) t += `\n> 打字註記：${s.text.trim().replace(/\n/g, '\n> ')}\n`; });
   return t;
@@ -780,7 +854,7 @@ $('#xMd').onclick = () => download(fileBase() + '.md', exportMd(), 'text/markdow
 $('#xHtml').onclick = async () => {
   const b = $('#xHtml'); b.disabled = true; b.textContent = '製作中…';
   try {
-    let body = `<main>${cur.summary ? md(cur.summary) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`}<hr><h1>逐張筆記</h1>`;
+    let body = `<main>${cur.summary ? md(cur.summary) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`}${cur.questions ? '<hr><h1>可以提問的問題</h1>' + md(cur.questions) : ''}<hr><h1>逐張筆記</h1>`;
     for (let i = 0; i < slides.length; i++) { const s = slides[i]; body += `<section><p class="n">S${i + 1}</p><img src="${await composite(s, 1400, 0.8)}" alt="S${i + 1}">${md(s.ai)}${s.text.trim() ? `<blockquote>打字註記：${esc(s.text.trim()).replace(/\n/g, '<br>')}</blockquote>` : ''}</section>`; }
     const css = 'body{margin:0;background:#fff;color:#16233B;font:16px/1.65 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}main{max-width:820px;margin:0 auto;padding:24px 18px 80px}h1,h2,h3{font-family:"Songti TC","Noto Serif TC","PMingLiU",serif;line-height:1.35}h2{margin-top:1.6em}img{max-width:100%;height:auto;display:block;margin:8px 0}section{border-top:1px solid #D7DCE5;padding-top:14px;margin-top:26px;break-inside:avoid}.n{font-weight:700;background:#FFE45C;display:inline-block;padding:0 8px;margin:0}table{border-collapse:collapse;font-size:.92rem}.tw{overflow-x:auto}th,td{border-bottom:1px solid #D7DCE5;padding:6px 12px 6px 0;text-align:left;vertical-align:top}th{border-bottom:2px solid #16233B}blockquote{margin:.6em 0;padding-left:12px;border-left:3px solid #D7DCE5;color:#5B6779}hr{border:0;border-top:1px solid #D7DCE5;margin:2em 0}';
     download(fileBase() + '.html', `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(cur.title || '演講筆記')}</title><style>${css}</style></head><body>${body}</main></body></html>`, 'text/html;charset=utf-8');
