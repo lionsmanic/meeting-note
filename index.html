@@ -980,6 +980,22 @@ function paintStatus(s) {
   const a = $(`#slideList a[data-id="${s.id}"]`); if (a) { a.innerHTML = rowInner(s, slides.indexOf(s)); renderBatch(); }
   if (curSlide === s && $('#v-slide').classList.contains('on')) renderDetailAi();
 }
+function withAutoFigs(src, cap = 3) {   // 每一節文字裡提到的 S 編號，自動把那幾張照片放在該節最後（AI 已經標 [[S3]] 的就照它的）
+  if (!src) return src;
+  const out = []; let chunk = [];
+  const flush = () => {
+    if (!chunk.length) return; out.push(...chunk);
+    const head = chunk[0], skip = /^#\s/.test(head) || /待查證|提及的文獻|我的註記|待辦|開場白/.test(head);
+    if (!skip && !chunk.some(l => FIG_RE.test(l))) {
+      const nums = [];
+      for (const m of chunk.join('\n').matchAll(/(^|[^A-Za-z0-9])S(\d{1,3})(?!\d)/g)) { const n = +m[2], s = slides[n - 1]; if (s && s.kind !== 'audio' && !nums.includes(n)) nums.push(n); }
+      if (nums.length) out.push('', `[[${nums.slice(0, cap).map(n => 'S' + n).join(', ')}]]`);
+    }
+    chunk = [];
+  };
+  for (const l of String(src).replace(/\r/g, '').split('\n')) { if (/^#{1,3}\s/.test(l)) flush(); chunk.push(l); }
+  flush(); return out.join('\n');
+}
 async function fillFigs(root) {   // 彙整筆記裡的 [[S3]]：放上那一張的照片，點了打開那一張
   for (const f of $$('figure.sfig', root)) {
     const items = f.dataset.s.split(',').map(n => slides[n - 1]).filter(Boolean); if (!items.length) { f.remove(); continue; }
@@ -1001,7 +1017,7 @@ function renderQ() {
   const has = !!(cur && cur.questions), editing = !$('#qEdit').hidden;
   $('#qEmpty').hidden = has; $('#btnQEdit').hidden = !has;
   $('#btnQ').textContent = has ? '重新擬題' : '擬出提問';
-  if (!editing) $('#qView').innerHTML = has ? md(cur.questions) : '';
+  if (!editing) { $('#qView').innerHTML = has ? md(withAutoFigs(cur.questions, 2)) : ''; fillFigs($('#qView')); }
   if ($('#btnQ').disabled) return;
   $('#qInfo').textContent = has ? `${fmtDate(cur.questionsAt)} 擬題` + (cur.questionsN !== slides.length ? `（當時 ${cur.questionsN} 張，現在 ${slides.length} 張）` : '') : '';
 }
@@ -1010,7 +1026,7 @@ function renderSum() {
   const has = !!(cur && cur.summary), editing = !$('#sumEdit').hidden;
   $('#sumEmpty').hidden = has; $('#btnSumEdit').hidden = !has;
   $('#btnSum').textContent = has ? '重新彙整' : '彙整演講筆記';
-  if (!editing) { $('#sumView').innerHTML = has ? md(cur.summary) : ''; fillFigs($('#sumView')); }
+  if (!editing) { $('#sumView').innerHTML = has ? md(withAutoFigs(cur.summary)) : ''; fillFigs($('#sumView')); }
   if ($('#btnSum').disabled) return;
   $('#sumInfo').textContent = has ? `${fmtDate(cur.summaryAt)} 彙整` + (cur.summaryN !== slides.length ? `（當時 ${cur.summaryN} 張，現在 ${slides.length} 張）` : '') : '';
 }
@@ -1343,8 +1359,8 @@ $('#btnExport').onclick = () => { openDlg(dlgX); preparePrint(); }; $('#xClose')
 $('#xCopy').onclick = async () => { try { await navigator.clipboard.writeText(exportMd()); toast('已複製'); } catch (e) { toast('這個瀏覽器不允許複製，請改用下載'); } };
 $('#xMd').onclick = () => download(fileBase() + '.md', exportMd(), 'text/markdown;charset=utf-8');
 async function exportBody(imgMax) {   // 離線 HTML 與 PDF 共用：彙整、提問、逐張（照片含手寫）
-  let body = cur.summary ? await figsToImages(md(cur.summary), Math.min(imgMax, 1100)) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`;
-  if (cur.questions) body += '<h1 class="part">可以提問的問題</h1>' + md(cur.questions);
+  let body = cur.summary ? await figsToImages(md(withAutoFigs(cur.summary)), Math.min(imgMax, 1100)) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`;
+  if (cur.questions) body += '<h1 class="part">可以提問的問題</h1>' + await figsToImages(md(withAutoFigs(cur.questions, 2)), Math.min(imgMax, 1100));
   if (slides.length) body += '<h1 class="part">逐張筆記</h1>';
   for (let i = 0; i < slides.length; i++) { const s = slides[i]; body += `<section><div class="ph"><p class="n">S${i + 1}${isMedia(s) ? `　${s.kind === 'audio' ? '錄音' : '錄影'} ${mmss(s.dur)}` : ''}</p><img src="${await composite(s, imgMax, 0.8)}" alt="S${i + 1}"></div>${hasPad(s) ? `<img class="padimg" src="${padImage(s)}" alt="S${i + 1} 手寫筆記">` : ''}${md(s.ai)}${s.text.trim() ? `<blockquote>打字註記：${esc(s.text.trim()).replace(/\n/g, '<br>')}</blockquote>` : ''}</section>`; }
   return body;
@@ -1496,8 +1512,8 @@ async function buildPptx() {
     for (const b of sec.blocks) { if (b.t === 'h' && b.n === 3) out.push({ title: `${sec.title}｜${plainText(b.text)}`, blocks: [] }); else out[out.length - 1].blocks.push(b); }
     return out.filter(x => x.blocks.length);
   };
-  if (cur.summary) for (const sec of packSections(mdSections(cur.summary), 18).flatMap(splitSub)) await flow(sec.title || '彙整筆記', sec.blocks, sec.merged ? [18, 16] : [20, 18, 16, 14], '彙整筆記（AI 依逐張筆記整理）');
-  if (cur.questions) for (const sec of mdSections(cur.questions)) await flow(sec.title || '提問', sec.blocks, [20, 18, 16], '可以提問的問題');
+  if (cur.summary) for (const sec of packSections(mdSections(withAutoFigs(cur.summary)), 18).flatMap(splitSub)) await flow(sec.title || '彙整筆記', sec.blocks, sec.merged ? [18, 16] : [20, 18, 16, 14], '彙整筆記（AI 依逐張筆記整理）');
+  if (cur.questions) for (const sec of mdSections(withAutoFigs(cur.questions, 2))) await flow(sec.title || '提問', sec.blocks, [20, 18, 16], '可以提問的問題');
   // 逐張：左條列、右照片；完整筆記放備忘稿
   const TW = 5.75, IX = PP.MX + TW + 0.3, IW = PP.W - PP.MX - IX;
   for (let i = 0; i < slides.length; i++) {
