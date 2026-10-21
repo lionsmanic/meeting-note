@@ -646,21 +646,31 @@ function md(src) {
 }
 
 /* ---------- Gemini ---------- */
-const SYS_SLIDE = `你是協助醫師在學術會議中做筆記的助理。使用者會給你一張會議投影片的照片（可能歪斜、反光、被前排遮住一部分），有時還有他當下的手寫或打字註記。請寫出這一張投影片的筆記。
+const SYS_SLIDE = `你是協助醫師在學術會議中做筆記的助理。使用者會給你一張會議投影片的照片（可能歪斜、反光、被前排遮住一部分），有時還有他當下的手寫或打字註記。請寫出這一張投影片的筆記，分成「中文重點」和「投影片內容」兩部分。
 
-規則：
-- 用繁體中文撰寫；英文專有名詞、藥名、試驗名稱、統計量與縮寫保留原文，不要翻譯。
-- 只寫投影片上看得到的內容，不要補充投影片沒有的知識。看不清楚的字寫〔不清楚〕，絕對不要猜數字。
-- 數值（HR、CI、p 值、n、百分比、劑量、追蹤時間）逐字照抄。
-- 投影片上的表格用 Markdown 表格重建。圖（Kaplan-Meier curve、forest plot、流程圖等）用一兩句話說明它呈現什麼，並寫出圖上讀得到的數值。
+中文重點：
+- 用繁體中文寫 3–5 點，說明這張投影片在講什麼、數據代表什麼意思，讓人不看原文也能掌握。
+- 專有名詞、藥名、試驗名稱、統計量與縮寫保留英文原文（例如 PFS、HR、pembrolizumab、KEYNOTE-A18），不要硬譯。
+- 可以把投影片上的數字換成白話說明（例如 HR 0.70 表示風險約降低 30%），但不要加入投影片以外的數據或知識。
+- 如實呈現：投影片若只是講者或廠商的主張、或屬於次要／探索性分析，要寫出來，不要把結論寫得比投影片更強。
+
+投影片內容：
+- 照投影片原文記錄文字與數值；原文是英文就保留英文，不要翻譯。
+- 數值（HR、CI、p 值、n、百分比、劑量、追蹤時間）逐字照抄；看不清楚的字寫〔不清楚〕，絕對不要猜數字。
+- 投影片上的表格用 Markdown 表格重建。圖（Kaplan-Meier curve、forest plot、流程圖等）用一兩句繁體中文說明它呈現什麼，並寫出圖上讀得到的數值。
 - 投影片上的 reference／citation 照錄。
+
+其他：
 - 影像可能不只一張，最後的文字會說明每一張是什麼。照片上的手繪筆跡：辨識手寫的字，並說明圈起或標示了哪個部分。照片旁另外手寫的筆記（白底）：辨識成文字，看不清楚的字寫〔不清楚〕。
-- 使用者的手寫與打字註記是他自己的想法，一律放在最後的「我的註記」，照原意整理，不要混進投影片內容。沒有註記就省略這一節。
-- 如果照片不是投影片（例如空白手寫頁、海報、講義），就把上面的內容整理成筆記，標題自行擬定。
+- 使用者的手寫與打字註記是他自己的想法，一律放在最後的「我的註記」，用繁體中文照原意整理，不要混進投影片內容。沒有註記就省略這一節。
+- 如果照片不是投影片（例如空白手寫頁、海報、講義），一樣分成「中文重點」和「內容」兩部分整理，標題自行擬定。
 
 輸出格式（Markdown），不要前言或結語：
-## 投影片標題
-- 重點條列
+## 投影片標題（照原文）
+### 中文重點
+- …
+### 投影片內容
+- …
 （需要時加表格或圖的說明）
 **出處**：…
 **我的註記**：…`;
@@ -1432,7 +1442,10 @@ async function buildPptx() {
     const all = mdBlocks(s.ai); if (all.length && all[0].t === 'h') all.shift();
     const typed = s.text.trim(); if (typed && (s.dirty || !s.ai)) all.push({ t: 'p', text: '**打字註記**：' + typed.replace(/\s*\n\s*/g, ' ') });
     if (!all.length) all.push({ t: 'p', text: s.ai ? '' : '（這張還沒有辨識）' });
-    const text = all.filter(b => b.t !== 'table' && b.text), tables = all.filter(b => b.t === 'table');
+    const zh = [], other = []; let inZh = false;
+    for (const b of all) { if (b.t === 'h') { inZh = /中文重點/.test(plainText(b.text)); continue; } (inZh ? zh : other).push(b); }
+    const text = zh.length ? [...zh, ...other.filter(b => b.t === 'p' && /^\*\*(出處|我的註記|打字註記)/.test(b.text))]   // 有中文重點時，投影片上只放中文重點、出處與註記；原文紀錄在照片和備忘稿裡
+      : all.filter(b => b.t !== 'table' && b.text), tables = all.filter(b => b.t === 'table');
     const notes = [plainText(s.ai).replace(/^#{1,4}\s+/gm, '').replace(/^(\s*)[-*+]\s+/gm, '$1• '), typed ? '打字註記：' + typed : ''].filter(Boolean).join('\n\n');
     const f = fitPages(text, [18, 16, 14, 12], TW, PP.BH), sl = page(title, notes);
     if (f.pages[0]) body(sl, f.pages[0], f.pt, TW);
