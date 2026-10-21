@@ -135,6 +135,10 @@ textarea{width:100%;background:var(--sheet);border:1px solid var(--rule);border-
 .note hr{border:0;border-top:1px solid var(--rule);margin:1.2em 0}
 .tw{overflow-x:auto;margin:.7em 0}
 .note table{border-collapse:collapse;font-size:.92rem;min-width:100%}
+.sfig{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:10px 0 18px}
+.sfig a{color:inherit;text-decoration:none;display:block}
+.sfig img{display:block;width:100%;aspect-ratio:16/10;object-fit:contain;background:#000;border-radius:3px}
+.sfig figcaption{font-size:.8rem;color:var(--ink2);margin-top:4px;line-height:1.4}
 .note th,.note td{border-bottom:1px solid var(--rule);padding:6px 10px 6px 0;text-align:left;vertical-align:top}
 .note th,.note td{overflow-wrap:normal;word-break:normal}
 .note th{border-bottom:2px solid var(--ink);font-weight:700;white-space:nowrap}
@@ -219,6 +223,9 @@ dialog a{color:var(--pen)}
   #printRoot tr{break-inside:avoid}
   #printRoot blockquote{margin:5pt 0;padding-left:8pt;border-left:2pt solid #D7DCE5;color:#5B6779}
   #printRoot hr{border:0;border-top:.5pt solid #D7DCE5;margin:10pt 0}
+  #printRoot .sfig{display:grid;grid-template-columns:1fr 1fr;gap:8pt;margin:6pt 0 12pt;break-inside:avoid}
+  #printRoot .sfig img{max-height:62mm;width:100%;object-fit:contain;margin:0}
+  #printRoot .sfig figcaption{font-size:8.5pt;color:#5B6779}
 }
 @media (prefers-reduced-motion: reduce){.dot{animation:none}#camFlash.go{animation:none}#toast{transition:none}}
 @media (max-width:359px){
@@ -615,8 +622,9 @@ if (window.ResizeObserver) { new ResizeObserver(photoSf.size).observe(dImg); new
 dImg.addEventListener('load', photoSf.size);
 
 /* ---------- 簡易 Markdown 轉 HTML（標題、清單、表格、粗體、引用） ---------- */
+const FIG_RE = /^\s*\[\[\s*(S?\d+(?:\s*[,，、]\s*S?\d+)*)\s*\]\]\s*$/i;
 function md(src) {
-  const inl = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, '$1<em>$2</em>');
+  const inl = s => esc(s).replace(/\[\[\s*S?(\d+)[^\]]*\]\]/gi, '（S$1）').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, '$1<em>$2</em>');
   const L = String(src || '').replace(/\r/g, '').split('\n'), out = []; let i = 0, m;
   const isList = l => /^\s*([-*+]|\d+[.)])\s+/.test(l), isRow = l => /^\s*\|.*\|\s*$/.test(l);
   const cells = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
@@ -642,9 +650,10 @@ function md(src) {
       while (st.length) h += '</li></' + st.pop().tag + '>';
       out.push(h); continue;
     }
+    if ((m = l.match(FIG_RE))) { out.push(`<figure class="sfig" data-s="${m[1].match(/\d+/g).join(',')}"></figure>`); i++; continue; }   // 照片搭配筆記
     if (/^>\s?/.test(l)) { const b = []; while (i < L.length && /^>\s?/.test(L[i])) b.push(L[i++].replace(/^>\s?/, '')); out.push('<blockquote>' + b.map(inl).join('<br>') + '</blockquote>'); continue; }
     const p = [];
-    while (i < L.length && L[i].trim() && !/^#{1,4}\s/.test(L[i]) && !isList(L[i]) && !isRow(L[i]) && !/^>\s?/.test(L[i])) p.push(L[i++]);
+    while (i < L.length && L[i].trim() && !/^#{1,4}\s/.test(L[i]) && !isList(L[i]) && !isRow(L[i]) && !/^>\s?/.test(L[i]) && !FIG_RE.test(L[i])) p.push(L[i++]);
     if (p.length) out.push('<p>' + p.map(inl).join('<br>') + '</p>'); else i++;
   }
   return out.join('\n');
@@ -680,24 +689,34 @@ const SYS_SLIDE = `你是協助醫師在學術會議中做筆記的助理。使�
 **出處**：…
 **我的註記**：…`;
 
-const SYS_SUM = `你是協助醫師整理學術演講筆記的助理。以下是同一場演講逐張投影片的筆記，依拍攝順序編號為 S1、S2…。其中「我的註記」與〔聽講者打字註記〕是聽講者本人的想法，不是講者的內容。請彙整成一份日後可以查閱的演講筆記。
+const SYS_SUM = `你是協助醫師整理學術會議筆記的助理。以下是同一場會議或演講的逐項筆記（投影片照片、錄音、錄影），依拍攝順序編號為 S1、S2…。其中「我的註記」與〔聽講者打字註記〕是聽講者本人的想法，不是講者的內容。請彙整成一份有條理、日後可以查閱的會議筆記，並用照片搭配文字呈現。
 
 規則：
 - 用繁體中文撰寫；英文專有名詞、藥名、試驗名稱、統計量與縮寫保留原文。
-- 只根據提供的內容，不要加入外部知識或自行推算的數據。逐張筆記中標〔不清楚〕的地方不要自行補齊，列進「待查證」。
-- 如實呈現：分清楚講者引用的證據（試驗結果、文獻）與講者個人的意見或經驗；不要把結論寫得比投影片上更強。
-- 依主題重新組織，不必照投影片順序，重複的內容合併。每個要點後面用（S3）這樣的方式標出來源投影片。
+- 只根據提供的內容，不要加入外部知識或自行推算的數據。逐項筆記中標〔不清楚〕的地方不要自行補齊，列進「待查證」。
+- 如實呈現：分清楚講者引用的證據（試驗結果、文獻）與講者個人的意見或經驗；不要把結論寫得比投影片上更強；早期資料、單一中心經驗、小樣本、探索性分析或廠商贊助的內容要註明。
+- 依主題重新組織，不必照拍攝順序，重複的內容合併。每個要點後面用（S3）這樣的方式標出來源。
 - 數據優先用表格呈現。
+- 「值得學習的新亮點」挑出這場會議裡真正新的東西：新技術或術式、新數據、新觀念、新的臨床做法或流程，也包括值得借鏡的教學或呈現方式。每一點寫出新在哪裡、為什麼值得學（對臨床、研究或教學的意義）、證據程度。沒有真正新的就少寫，不要硬湊。
+- 照片搭配：在「會議重點整理」與「值得學習的新亮點」的每一個 ### 小節最後，另起一行寫 [[S3]] 或 [[S3, S5]]，標出最能代表這一節的 1–2 張投影片或錄影（只能用上面出現過的編號，不要放錄音）。其他地方不要使用這個標記。
 
 輸出格式（Markdown），沒有內容的章節直接省略，不要前言或結語：
-# 演講題目
+# 會議或演講題目
 講者｜會議｜日期
 ## 重點摘要
 3–5 點 take-home message
-## 內容整理
-### 依主題分節
+## 會議重點整理
+### 主題
+- 要點（S3）
+[[S3, S5]]
+## 值得學習的新亮點
+### 亮點名稱
+- **新在哪裡**：…（S4）
+- **為什麼值得學**：…
+- **證據程度**：…（例如 phase 3 RCT、單中心回顧、個案經驗、講者意見）
+[[S4]]
 ## 關鍵數據
-表格：研究或來源｜族群｜比較｜結果｜投影片
+表格：研究或來源｜族群｜比較｜結果｜來源
 ## 講者的結論
 ## 我的註記與待辦
 ## 待查證
@@ -961,6 +980,23 @@ function paintStatus(s) {
   const a = $(`#slideList a[data-id="${s.id}"]`); if (a) { a.innerHTML = rowInner(s, slides.indexOf(s)); renderBatch(); }
   if (curSlide === s && $('#v-slide').classList.contains('on')) renderDetailAi();
 }
+async function fillFigs(root) {   // 彙整筆記裡的 [[S3]]：放上那一張的照片，點了打開那一張
+  for (const f of $$('figure.sfig', root)) {
+    const items = f.dataset.s.split(',').map(n => slides[n - 1]).filter(Boolean); if (!items.length) { f.remove(); continue; }
+    f.innerHTML = items.map(s => `<a href="#/s/${cur.id}/${s.id}"><img alt="S${slides.indexOf(s) + 1}" loading="lazy"><figcaption>S${slides.indexOf(s) + 1}　${esc(slideTitle(s))}</figcaption></a>`).join('');
+    const imgs = $$('img', f); for (let k = 0; k < items.length; k++) imgs[k].src = items[k].ink && items[k].ink.length ? await composite(items[k], 1200, 0.82) : await imgURL(items[k].id);
+  }
+}
+async function figsToImages(html, imgMax) {   // 匯出用：把圖框換成內嵌圖片
+  let out = '';
+  for (const part of html.split(/(<figure class="sfig" data-s="[\d,]+"><\/figure>)/)) {
+    const m = part.match(/^<figure class="sfig" data-s="([\d,]+)">/); if (!m) { out += part; continue; }
+    let inner = '';
+    for (const n of m[1].split(',')) { const s = slides[n - 1]; if (s) inner += `<div><img src="${await composite(s, imgMax, 0.8)}" alt="S${n}"><figcaption>S${n}　${esc(slideTitle(s))}</figcaption></div>`; }
+    if (inner) out += `<figure class="sfig">${inner}</figure>`;
+  }
+  return out;
+}
 function renderQ() {
   const has = !!(cur && cur.questions), editing = !$('#qEdit').hidden;
   $('#qEmpty').hidden = has; $('#btnQEdit').hidden = !has;
@@ -974,7 +1010,7 @@ function renderSum() {
   const has = !!(cur && cur.summary), editing = !$('#sumEdit').hidden;
   $('#sumEmpty').hidden = has; $('#btnSumEdit').hidden = !has;
   $('#btnSum').textContent = has ? '重新彙整' : '彙整演講筆記';
-  if (!editing) $('#sumView').innerHTML = has ? md(cur.summary) : '';
+  if (!editing) { $('#sumView').innerHTML = has ? md(cur.summary) : ''; fillFigs($('#sumView')); }
   if ($('#btnSum').disabled) return;
   $('#sumInfo').textContent = has ? `${fmtDate(cur.summaryAt)} 彙整` + (cur.summaryN !== slides.length ? `（當時 ${cur.summaryN} 張，現在 ${slides.length} 張）` : '') : '';
 }
@@ -1295,7 +1331,7 @@ $('#cTest').onclick = async () => {
 
 /* ---------- 匯出 ---------- */
 function exportMd() {
-  let t = cur.summary ? cur.summary.trim() + '\n' : `# ${cur.title || '未命名場次'}\n\n${[cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜')}\n`;
+  let t = cur.summary ? cur.summary.trim().replace(/^\s*\[\[([^\]]+)\]\]\s*$/gm, '（照片：$1）') + '\n' : `# ${cur.title || '未命名場次'}\n\n${[cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜')}\n`;
   if (cur.questions) t += '\n---\n\n# 可以提問的問題\n\n' + cur.questions.trim() + '\n';
   t += '\n---\n\n# 逐張筆記\n';
   slides.forEach((s, i) => { t += `\n### S${i + 1}\n\n${(s.ai || '（未辨識）').replace(/^(#{1,3})\s/gm, '#### ')}\n`; if (s.text.trim()) t += `\n> 打字註記：${s.text.trim().replace(/\n/g, '\n> ')}\n`; });
@@ -1307,7 +1343,7 @@ $('#btnExport').onclick = () => { openDlg(dlgX); preparePrint(); }; $('#xClose')
 $('#xCopy').onclick = async () => { try { await navigator.clipboard.writeText(exportMd()); toast('已複製'); } catch (e) { toast('這個瀏覽器不允許複製，請改用下載'); } };
 $('#xMd').onclick = () => download(fileBase() + '.md', exportMd(), 'text/markdown;charset=utf-8');
 async function exportBody(imgMax) {   // 離線 HTML 與 PDF 共用：彙整、提問、逐張（照片含手寫）
-  let body = cur.summary ? md(cur.summary) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`;
+  let body = cur.summary ? await figsToImages(md(cur.summary), Math.min(imgMax, 1100)) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`;
   if (cur.questions) body += '<h1 class="part">可以提問的問題</h1>' + md(cur.questions);
   if (slides.length) body += '<h1 class="part">逐張筆記</h1>';
   for (let i = 0; i < slides.length; i++) { const s = slides[i]; body += `<section><div class="ph"><p class="n">S${i + 1}${isMedia(s) ? `　${s.kind === 'audio' ? '錄音' : '錄影'} ${mmss(s.dur)}` : ''}</p><img src="${await composite(s, imgMax, 0.8)}" alt="S${i + 1}"></div>${hasPad(s) ? `<img class="padimg" src="${padImage(s)}" alt="S${i + 1} 手寫筆記">` : ''}${md(s.ai)}${s.text.trim() ? `<blockquote>打字註記：${esc(s.text.trim()).replace(/\n/g, '<br>')}</blockquote>` : ''}</section>`; }
@@ -1317,7 +1353,7 @@ $('#xHtml').onclick = async () => {
   const b = $('#xHtml'); b.disabled = true; b.textContent = '製作中…';
   try {
     const body = await exportBody(1400);
-    const css = 'body{margin:0;background:#fff;color:#16233B;overflow-wrap:anywhere;font:16px/1.65 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}main{max-width:820px;margin:0 auto;padding:24px 18px 80px}h1,h2,h3{font-family:"Songti TC","Noto Serif TC","PMingLiU",serif;line-height:1.35}h1{font-size:1.6rem}h1.part{margin-top:2em;padding-top:1em;border-top:1px solid #D7DCE5}h2{margin-top:1.6em}img{max-width:100%;height:auto;display:block;margin:8px 0}section{border-top:1px solid #D7DCE5;padding-top:14px;margin-top:26px}.ph{break-inside:avoid}.n{font-weight:700;background:#FFE45C;display:inline-block;padding:0 8px;margin:0}table{border-collapse:collapse;font-size:.92rem}.tw{overflow-x:auto}th,td{border-bottom:1px solid #D7DCE5;padding:6px 12px 6px 0;text-align:left;vertical-align:top;overflow-wrap:normal;word-break:normal}th{border-bottom:2px solid #16233B;white-space:nowrap}blockquote{margin:.6em 0;padding-left:12px;border-left:3px solid #D7DCE5;color:#5B6779}hr{border:0;border-top:1px solid #D7DCE5;margin:2em 0}';
+    const css = 'body{margin:0;background:#fff;color:#16233B;overflow-wrap:anywhere;font:16px/1.65 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}main{max-width:820px;margin:0 auto;padding:24px 18px 80px}h1,h2,h3{font-family:"Songti TC","Noto Serif TC","PMingLiU",serif;line-height:1.35}h1{font-size:1.6rem}h1.part{margin-top:2em;padding-top:1em;border-top:1px solid #D7DCE5}h2{margin-top:1.6em}img{max-width:100%;height:auto;display:block;margin:8px 0}section{border-top:1px solid #D7DCE5;padding-top:14px;margin-top:26px}.ph{break-inside:avoid}.n{font-weight:700;background:#FFE45C;display:inline-block;padding:0 8px;margin:0}table{border-collapse:collapse;font-size:.92rem}.tw{overflow-x:auto}th,td{border-bottom:1px solid #D7DCE5;padding:6px 12px 6px 0;text-align:left;vertical-align:top;overflow-wrap:normal;word-break:normal}th{border-bottom:2px solid #16233B;white-space:nowrap}blockquote{margin:.6em 0;padding-left:12px;border-left:3px solid #D7DCE5;color:#5B6779}hr{border:0;border-top:1px solid #D7DCE5;margin:2em 0}.sfig{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:8px 0 18px}.sfig div{margin:0}.sfig img{width:100%;margin:0;border:1px solid #D7DCE5}.sfig figcaption{font-size:.8rem;color:#5B6779;margin-top:4px}';
     download(fileBase() + '.html', `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(cur.title || '演講筆記')}</title><style>${css}</style></head><body><main>${body}</main></body></html>`, 'text/html;charset=utf-8');
   } catch (e) { toast('匯出失敗：' + e.message); }
   b.disabled = false; b.textContent = '下載離線 HTML（含照片與手寫）';
@@ -1353,6 +1389,7 @@ function mdBlocks(src) {   // Markdown -> 標題／條列／段落／表格 區�
     if ((m = l.match(/^(#{1,4})\s+(.*)/))) { out.push({ t: 'h', n: m[1].length, text: m[2] }); i++; continue; }
     if (isRow(l) && i + 1 < L.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(L[i + 1])) { const head = cells(l), rows = []; i += 2; while (i < L.length && isRow(L[i])) rows.push(cells(L[i++])); out.push({ t: 'table', head, rows }); continue; }
     if ((m = l.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)/))) { out.push({ t: 'li', d: Math.min(2, Math.floor(m[1].replace(/\t/g, '  ').length / 2)), o: /\d/.test(m[2]), text: m[3] }); i++; continue; }
+    if ((m = l.match(FIG_RE))) { out.push({ t: 'fig', nums: m[1].match(/\d+/g).map(Number) }); i++; continue; }
     out.push({ t: 'p', text: l.replace(/^>\s?/, '') }); i++;
   }
   return out;
@@ -1362,7 +1399,7 @@ const boldRuns = t => String(t).replace(/`/g, '').split(/(\*\*.+?\*\*)/).filter(
 const textW = t => { let u = 0; for (const ch of t) u += /[⺀-鿿豈-﫿＀-￯]/.test(ch) ? 1 : 0.56; return u; };   // 以「全形字寬」為單位
 const PP = { W: 13.333, MX: 0.6, BY: 1.55, BH: 5.25, FONT: 'Microsoft JhengHei', INK: '16233B', GRAY: '5B6779', RULE: 'D7DCE5', PEN: '1F4FBF' };
 PP.BW = PP.W - 2 * PP.MX;
-function blockH(b, pt, W) { const p = b.t === 'h' ? pt + 2 : pt, ind = b.t === 'li' ? 0.38 * (b.d + 1) : 0; return Math.max(1, Math.ceil(textW(plainText(b.text)) * p / 72 / (W - ind - 0.2))) * p * 1.25 / 72 + (b.t === 'h' ? 0.2 : 0.09); }
+function blockH(b, pt, W) { if (b.t === 'fig') return 0; const p = b.t === 'h' ? pt + 2 : pt, ind = b.t === 'li' ? 0.38 * (b.d + 1) : 0; return Math.max(1, Math.ceil(textW(plainText(b.text)) * p / 72 / (W - ind - 0.2))) * p * 1.25 / 72 + (b.t === 'h' ? 0.2 : 0.09); }
 function paginate(blocks, pt, W, H) { const pages = [[]]; let h = 0; for (const b of blocks) { const x = blockH(b, pt, W); if (h + x > H && pages[pages.length - 1].length) { pages.push([]); h = 0; } pages[pages.length - 1].push(b); h += x; } return pages.filter(p => p.length); }
 function fitPages(blocks, sizes, W, H) { let pages = []; for (const pt of sizes) { pages = paginate(blocks, pt, W, H); if (pages.length <= 1) return { pt, pages }; } return { pt: sizes[sizes.length - 1], pages }; }
 function pptRuns(blocks, pt) {   // 段落屬性只放在每段第一個 run；bullet 放在非第一個 run 會被函式庫當成新段落
@@ -1388,7 +1425,7 @@ function mdSections(src) {   // 依 ## 切成一節一節；最前面的 # 題�
   return secs.filter(x => !(x.top && x.blocks.length <= 1));
 }
 function packSections(secs, pt) {   // 只有一兩點的小節併到同一張，標題用「／」串起來，避免一張只有一行
-  const out = [], hOf = bl => bl.reduce((a, b) => a + blockH(b, pt, PP.BW), 0), hasT = x => x.blocks.some(b => b.t === 'table');
+  const out = [], hOf = bl => bl.reduce((a, b) => a + blockH(b, pt, PP.BW), 0), hasT = x => x.blocks.some(b => b.t === 'table' || b.t === 'fig');   // 有表格或照片的小節自己一張
   for (const sec of secs) {
     const g = out[out.length - 1], hd = { t: 'h', n: 3, text: sec.title };
     if (g && !g.solo && !hasT(sec) && textW(g.title + '／' + sec.title) <= 30 && hOf(g.blocks) + hOf([hd, ...sec.blocks]) <= PP.BH * 0.92) {
@@ -1426,11 +1463,26 @@ async function buildPptx() {
     const cell = (text, hd) => ({ text, options: { bold: hd, fontSize: pt, color: PP.INK, fontFace: PP.FONT, valign: 'top', border: [{ type: 'none' }, { type: 'none' }, { type: 'solid', pt: hd ? 1.5 : 0.5, color: hd ? PP.INK : PP.RULE }, { type: 'none' }] } });
     chunks.forEach((rows, k) => page(title + (k ? '（續）' : ''), notes).addTable([pad(tb.head).map(c => cell(c, true)), ...rows.map(r => pad(r).map(c => cell(c, false)))], { x: PP.MX, y: PP.BY, w: PP.BW, colW }));
   };
-  const flow = (title, blocks, sizes, notes) => {   // 文字與表格依原順序排，放不下就接續下一張
-    let buf = [], first = true;
-    const flush = () => { if (!buf.length) return; const f = fitPages(buf, sizes, PP.BW, PP.BH); f.pages.forEach(pg => { body(page(title + (first ? '' : '（續）'), notes), pg, f.pt, PP.BW); first = false; }); buf = []; };
-    for (const b of blocks) { if (b.t === 'table') { flush(); tableSlides(title + (first ? '' : '（續）'), b, notes); first = false; } else buf.push(b); }
-    flush();
+  const addFigs = async (sl, figs, x0) => {   // 右欄放 1–2 張代表照片，下方小字標 S 編號
+    const cw = PP.W - PP.MX - x0, gap = 0.2, hb = (PP.BH - gap * (figs.length - 1)) / figs.length;
+    for (let k = 0; k < figs.length; k++) {
+      const s = figs[k], ar = s.w / s.h, w = Math.min(cw, (hb - 0.35) * ar), h = w / ar, y = PP.BY + k * (hb + gap), x = x0 + (cw - w);
+      sl.addImage({ data: (await composite(s, 1400, 0.8)).replace(/^data:/, ''), x, y, w, h, altText: `S${slides.indexOf(s) + 1}` });
+      sl.addShape(pres.ShapeType.rect, { x, y, w, h, fill: { type: 'none' }, line: { color: PP.RULE, width: 0.75 } });
+      sl.addText(`S${slides.indexOf(s) + 1}　${slideTitle(s)}`, { x, y: y + h + 0.04, w, h: 0.28, fontSize: 10, color: PP.GRAY, fontFace: PP.FONT, margin: 0, isTextBox: true });
+    }
+  };
+  const flow = async (title, blocks, sizes, notes) => {   // 文字與表格依原順序排，放不下就接續下一張；有 [[S3]] 的小節把照片放右邊
+    const figs = [...new Set(blocks.filter(b => b.t === 'fig').flatMap(b => b.nums))].map(n => slides[n - 1]).filter(Boolean).slice(0, 2);
+    const W = figs.length ? 7.2 : PP.BW; let buf = [], first = true, placed = !figs.length;
+    const flush = async () => {
+      if (!buf.length) return; const f = fitPages(buf, sizes, W, PP.BH);
+      for (const pg of f.pages) { const sl = page(title + (first ? '' : '（續）'), notes); body(sl, pg, f.pt, W); if (!placed) { await addFigs(sl, figs, PP.MX + W + 0.35); placed = true; } first = false; }
+      buf = [];
+    };
+    for (const b of blocks.filter(b => b.t !== 'fig')) { if (b.t === 'table') { await flush(); tableSlides(title + (first ? '' : '（續）'), b, notes); first = false; } else buf.push(b); }
+    await flush();
+    if (!placed) await addFigs(page(title + (first ? '' : '（照片）'), notes), figs, PP.MX);
   };
   // 封面
   const cover = pres.addSlide({ masterName: 'COVER' });
@@ -1438,8 +1490,14 @@ async function buildPptx() {
   cover.addText([cur.speaker, cur.event, date].filter(Boolean).join('｜'), { x: PP.MX, y: 4.2, w: PP.BW, h: 0.5, fontSize: 20, color: PP.INK, fontFace: PP.FONT, margin: 0, isTextBox: true });
   cover.addText(`聽講筆記｜投影片照片 ${slides.length} 張`, { x: PP.MX, y: 4.75, w: PP.BW, h: 0.4, fontSize: 14, color: PP.GRAY, fontFace: PP.FONT, margin: 0, isTextBox: true });
   // 彙整筆記、提問
-  if (cur.summary) for (const sec of packSections(mdSections(cur.summary), 18)) flow(sec.title || '彙整筆記', sec.blocks, sec.merged ? [18, 16] : [20, 18, 16, 14], '彙整筆記（AI 依逐張筆記整理）');
-  if (cur.questions) for (const sec of mdSections(cur.questions)) flow(sec.title || '提問', sec.blocks, [20, 18, 16], '可以提問的問題');
+  const splitSub = sec => {   // 有照片的章節：每個 ### 小節自己一張，照片跟著它的重點
+    if (!sec.blocks.some(b => b.t === 'fig')) return [sec];
+    const out = [{ title: sec.title, blocks: [] }];
+    for (const b of sec.blocks) { if (b.t === 'h' && b.n === 3) out.push({ title: `${sec.title}｜${plainText(b.text)}`, blocks: [] }); else out[out.length - 1].blocks.push(b); }
+    return out.filter(x => x.blocks.length);
+  };
+  if (cur.summary) for (const sec of packSections(mdSections(cur.summary), 18).flatMap(splitSub)) await flow(sec.title || '彙整筆記', sec.blocks, sec.merged ? [18, 16] : [20, 18, 16, 14], '彙整筆記（AI 依逐張筆記整理）');
+  if (cur.questions) for (const sec of mdSections(cur.questions)) await flow(sec.title || '提問', sec.blocks, [20, 18, 16], '可以提問的問題');
   // 逐張：左條列、右照片；完整筆記放備忘稿
   const TW = 5.75, IX = PP.MX + TW + 0.3, IW = PP.W - PP.MX - IX;
   for (let i = 0; i < slides.length; i++) {
