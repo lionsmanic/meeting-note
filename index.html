@@ -382,7 +382,7 @@ dialog a{color:var(--pen)}
   </div>
   <small>手機內建相機畫質最好，存進相簿的是相機原始檔，但每張要多按一次「使用照片」。網頁內相機存的是拍到的原始畫面，不壓小。</small>
   <label class="chk"><input type="checkbox" id="cAuto"> 自動產生 AI 筆記</label>
-  <small>寫完註記、離開那一張時自動送出，手寫和打字會一起交給 AI；連拍或從相簿加入的則拍完就送。關掉就改成自己按「AI 生成筆記」。</small>
+  <small>新的照片寫完註記、離開那一張時自動送出，手寫和打字會一起交給 AI；連拍或從相簿加入的則拍完就送。已經有 AI 筆記的，之後改註記不會自動重新生成，要自己按「重新生成」。關掉這個選項，新照片也改成自己按。</small>
   <label class="chk"><input type="checkbox" id="cAlbum"> 拍照後把原檔存到手機相簿</label>
   <small>iPhone／iPad 的瀏覽器不能自己寫入「照片」：拍完在註記畫面上方按「存到相簿」，再點分享選單的「儲存影像」。Android 每拍一張會自動下載到相簿的 Download。從「相簿」加入的照片不會重複存。</small>
   <label class="f" for="cExtra">彙整時的額外要求（選填）</label>
@@ -580,11 +580,16 @@ function surface(canvas, key, byWidth, base, enabled) {
   return sf;
 }
 const photoSf = surface(inkC, 'ink', false, 0.0045, () => pen.on), padSf = surface(padC, 'pad', true, 0.006, () => true);
+function noteSig(s) {   // 手寫、照片上的筆跡、打字註記的指紋：復原到原樣時指紋也會一樣
+  const str = JSON.stringify([s.ink || [], s.pad || [], (s.text || '').trim()]); let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36) + ':' + str.length;
+}
+function markDirty(s) { s.dirty = !!(s.ai || inflight.has(s.id)) && (s.aiSig ? noteSig(s) !== s.aiSig : true); }
 function inkChanged(sf) {
   const s = curSlide; sf.paint();
   if (sf === photoSf && dImg.naturalWidth) s.thumb = makeThumb(dImg, s.w, s.h, s.ink);
-  s.rev = (s.rev || 0) + 1;
-  if (s.ai || inflight.has(s.id)) s.dirty = s.inkDirty = true;
+  markDirty(s);
   saveSlide(s); paintStatus(s);
 }
 const hasPad = s => (s.pad || []).length > 0;
@@ -841,7 +846,7 @@ let running = 0;
 function enqueue(s) { if (!cfg.auto || !cfg.key) return; if (!queue.includes(s)) queue.push(s); live.set(s.id, s); paintStatus(s); pump(); }
 function leaveSlide(s) {   // 離開一張時：還沒有 AI 筆記，或註記有更新，就把照片連同註記送出
   if (s.deleted || s.recording || inflight.has(s.id) || (s.kind === 'blank' && !s.ink.length)) return;
-  if (!s.ai || (s.dirty && !s.edited)) enqueue(s);
+  if (!s.ai) enqueue(s);   // 只自動送還沒有 AI 筆記的；已經生成過的要自己按「重新生成」
 }
 function pump() {
   while (running < 2 && queue.length) {
@@ -862,11 +867,11 @@ async function recognizePhoto(s) {
 }
 async function doRecognize(s) {
   await null; s.err = ''; paintStatus(s);
-  const rev = s.rev || 0;
+  const sigAt = noteSig(s);   // 記下送出當時的註記內容
   try {
     if (isMedia(s)) await recognizeMedia(s); else await recognizePhoto(s);
     s.aiAt = Date.now(); s.edited = false;
-    if ((s.rev || 0) === rev) s.dirty = s.inkDirty = false; else s.dirty = true;   // 生成途中又加了註記就維持「有更新」
+    s.aiSig = sigAt; s.dirty = noteSig(s) !== sigAt;   // 生成途中又改了註記就維持「有更新」
   } catch (e) { s.err = e.message || String(e); if (isMedia(s)) s.fileUri = ''; }
   stageOf.delete(s.id); inflight.delete(s.id); if (!queue.includes(s)) live.delete(s.id);
   if (!s.deleted) await saveSlide(s);
@@ -883,7 +888,7 @@ async function recognizeAll(list) {
 }
 async function deckText() {   // 先把沒辨識的補完，再組成整場的文字
   while ($('#btnAll').disabled) await sleep(300);
-  const todo = slides.filter(s => !s.recording && (!s.ai || (s.dirty && !s.edited)));   // 沒有 AI 筆記的，以及之後又加了註記的
+  const todo = slides.filter(s => !s.recording && !s.ai);   // 只補還沒有 AI 筆記的；打字註記另外直接交給彙整
   if (todo.length) await recognizeAll(todo);
   if (!slides.some(s => s.ai || s.text.trim())) throw new Error('沒有任何一張辨識成功：' + ((slides.find(s => s.err) || {}).err || ''));
   let t = `演講題目：${cur.title || '（未填）'}\n講者：${cur.speaker || '（未填）'}\n會議：${cur.event || '（未填）'}\n日期：${fmtDate(cur.createdAt).slice(0, 10)}\n投影片張數：${slides.length}\n`;
@@ -931,7 +936,7 @@ function statusOf(s) {
   if (queue.includes(s)) return ['busy', '排隊等 AI 辨識…'];
   if (s.err) return ['err', '辨識失敗：' + s.err];
   if (!s.ai) return ['', ''];
-  if (s.dirty) return ['', s.edited ? '註記有更新（AI 筆記已手動修改，不會自動重新生成）' : '註記有更新，AI 筆記尚未重新生成'];
+  if (s.dirty) return ['', '註記有更新；要納入 AI 筆記請按「重新生成」'];
   return ['', ''];
 }
 function rowInner(s, i) {
@@ -1074,7 +1079,7 @@ $('#fNative').onchange = async e => { const f = [...e.target.files]; e.target.va
 $('#btnBlank').onclick = async () => { const c = document.createElement('canvas'); c.width = 1600; c.height = 1200; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 1600, 1200); const s = await addSlide(c, 0, 0, 1600, 1200, 'blank'); pen.color = '#111111'; pen.erase = false; location.hash = `#/s/${cur.id}/${s.id}`; };
 
 /* ---------- 單張操作 ---------- */
-let textT; $('#dText').oninput = () => { const s = curSlide; s.text = $('#dText').value; s.rev = (s.rev || 0) + 1; if ((s.ai || inflight.has(s.id)) && !s.dirty) { s.dirty = true; renderDetailAi(); } clearTimeout(textT); textT = setTimeout(() => saveSlide(s), 400); };
+let textT; $('#dText').oninput = () => { const s = curSlide; s.text = $('#dText').value; const was = s.dirty; markDirty(s); if (was !== s.dirty) { renderDetailAi(); paintStatus(s); } clearTimeout(textT); textT = setTimeout(() => saveSlide(s), 400); };
 $('#dAiBtn').onclick = () => { if (!haveKey()) return; const s = curSlide; if (!$('#dAiEdit').hidden) $('#dEditAi').click(); recognize(s); };
 $('#dEditAi').onclick = async () => {
   const ed = $('#dAiEdit'), s = curSlide;
