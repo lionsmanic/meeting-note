@@ -103,6 +103,10 @@ button{cursor:pointer}
 .sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--rule);padding:0}
 .sw.on{outline:3px solid var(--pen);outline-offset:2px}
 .drawset{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.seg button{background:var(--sheet);border:0;border-left:1px solid var(--rule);min-height:44px;padding:6px 4px;font-size:.88rem;line-height:1.3}
+.seg button:first-child{border-left:0}
+.seg button.on{background:var(--ink);color:var(--paper);font-weight:700}
 .chk{display:flex;align-items:center;gap:10px;min-height:44px;margin-top:10px}
 .chk input{width:22px;height:22px;flex:none}
 label.f{display:block;font-size:.85rem;color:var(--ink2);margin:16px 0 6px}
@@ -400,7 +404,10 @@ dialog a{color:var(--pen)}
 
 <dialog id="dlgExport">
   <h2>匯出這一場</h2>
-  <div class="stack">
+  <label class="f" id="xScopeLabel">匯出內容</label>
+  <div class="seg" id="xScope" role="radiogroup" aria-labelledby="xScopeLabel"><button data-v="all" role="radio">全部</button><button data-v="sumq" role="radio">彙整＋提問</button><button data-v="sum" role="radio">只有彙整筆記</button></div>
+  <small id="xScopeHint"></small>
+  <div class="stack" style="margin-top:14px">
     <button class="btn" id="xPptx">下載 PowerPoint（.pptx）</button>
     <button class="btn" id="xPdf" disabled>PDF 準備中…</button>
     <button class="btn" id="xHtml">下載離線 HTML（含照片與手寫）</button>
@@ -408,7 +415,7 @@ dialog a{color:var(--pen)}
     <button class="btn" id="xCopy">複製筆記（Markdown）</button>
     <button class="btn danger" id="xDel">刪除這一場</button>
   </div>
-  <small>PowerPoint、PDF、HTML 都包含彙整筆記、提問、每張照片（含手寫）和逐張筆記。PDF 會開啟列印畫面：電腦選「儲存為 PDF」，iPhone／iPad 按列印畫面最上方的分享圖示再選「儲存到檔案」，Android 在印表機選「另存為 PDF」。</small>
+  <small>PDF 會開啟列印畫面：電腦選「儲存為 PDF」，iPhone／iPad 按列印畫面最上方的分享圖示再選「儲存到檔案」，Android 在印表機選「另存為 PDF」。</small>
   <div class="dlgrow"><button class="btn" id="xClose">關閉</button></div>
 </dialog>
 
@@ -430,7 +437,7 @@ let toastT;
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
 
 /* ---------- 設定 ---------- */
-const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', lvQ: 'medium', intro: '', extra: '', auto: true, album: true, after: 'note', camera: 'page' };
+const CFG_DEFAULT = { key: '', model: 'gemini-3.1-pro-preview', lvSlide: 'low', lvSum: 'high', lvQ: 'medium', intro: '', extra: '', auto: true, album: true, after: 'note', camera: 'page', scope: 'all' };
 let cfg = { ...CFG_DEFAULT };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('snapnote.cfg') || '{}')); } catch (e) {}
 function saveCfg() { try { localStorage.setItem('snapnote.cfg', JSON.stringify(cfg)); } catch (e) { toast('這個瀏覽器不允許儲存設定（可能是無痕模式）'); } }
@@ -910,7 +917,7 @@ async function deckText() {   // 先把沒辨識的補完，再組成整場的�
   const todo = slides.filter(s => !s.recording && !s.ai);   // 只補還沒有 AI 筆記的；打字註記另外直接交給彙整
   if (todo.length) await recognizeAll(todo);
   if (!slides.some(s => s.ai || s.text.trim())) throw new Error('沒有任何一張辨識成功：' + ((slides.find(s => s.err) || {}).err || ''));
-  let t = `演講題目：${cur.title || '（未填）'}\n講者：${cur.speaker || '（未填）'}\n會議：${cur.event || '（未填）'}\n日期：${fmtDate(cur.createdAt).slice(0, 10)}\n投影片張數：${slides.length}\n`;
+  let t = `演講題目：${cur.title || '（未填，請依內容擬一個簡短具體的題目，放在彙整筆記最上面的 # 標題）'}\n講者：${cur.speaker || '（未填）'}\n會議：${cur.event || '（未填）'}\n日期：${fmtDate(cur.createdAt).slice(0, 10)}\n投影片張數：${slides.length}\n`;
   if (slides.some(isMedia)) t += '標示（錄音）或（錄影）的項目不是投影片，是現場錄下內容的整理；錄音裡的（對應 S3）指的是當時拍下的那張投影片。\n';
   slides.forEach((s, i) => { t += `\n===== S${i + 1}${isMedia(s) ? `（${s.kind === 'audio' ? '錄音' : '錄影'}，${hhmm(s.t0)} 開始，長度 ${mmss(s.dur)}）` : ''} =====\n${s.ai || '（這張沒有辨識結果）'}\n`; if (s.text.trim()) t += `〔聽講者打字註記〕${s.text.trim()}\n`; });
   return { t, failed: slides.filter(s => !s.ai).length };
@@ -924,7 +931,9 @@ async function summarize() {
     $('#sumInfo').textContent = '彙整中，通常要半分鐘到一分鐘…';
     const p = t + '\n以上是全部投影片的筆記。請依規則彙整成一份演講筆記。' + (cfg.extra.trim() ? '\n\n聽講者的額外要求：' + cfg.extra.trim() : '');
     cur.summary = await gemini({ system: SYS_SUM, parts: [{ text: p }], level: cfg.lvSum });
-    cur.summaryAt = Date.now(); cur.summaryN = slides.length; await saveSession();
+    cur.summaryAt = Date.now(); cur.summaryN = slides.length;
+    const named = autoTitle(cur); await saveSession();
+    if (named) { $('#mTitle').value = cur.title; fitTitle(); toast(`已依彙整內容命名為「${cur.title}」，可以直接改`, 5000); }
     if (failed) toast(`有 ${failed} 張沒辨識成功，未納入彙整`, 4500);
   } catch (e) { toast(e.message || String(e), 5000); }
   btn.disabled = false; renderSum();
@@ -1033,9 +1042,16 @@ function renderSum() {
 function setTab(t) { tab = t; $$('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t)); $('#tab-slides').hidden = t !== 'slides'; $('#tab-sum').hidden = t !== 'sum'; $('#tab-q').hidden = t !== 'q'; }
 $$('.tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 
+function titleFrom(summary) {   // 彙整筆記第一行的 # 標題
+  const m = String(summary || '').match(/^#\s+(.+)$/m); if (!m) return '';
+  const t = plainText(m[1]).replace(/[「」]/g, '').trim();
+  return /^(會議或演講題目|演講題目|會議題目|題目|未命名|（未填|\(未填)/.test(t) ? '' : t.slice(0, 60);
+}
+function autoTitle(sess) { if (sess.title || !sess.summary) return false; const t = titleFrom(sess.summary); if (!t) return false; sess.title = t; sess.autoTitle = true; return true; }   // 只幫還沒有名稱的場次命名
 async function showHome() {
   cur = null; slides = []; curSlide = null; urls.forEach(u => URL.revokeObjectURL(u)); urls.clear(); printJob = null; $('#printRoot').innerHTML = '';
   const list = (await idb.all('sessions')).sort((a, b) => b.createdAt - a.createdAt);
+  for (const x of list) if (autoTitle(x)) await idb.put('sessions', x);   // 舊的未命名場次，有彙整就補上名稱
   $('#sessList').innerHTML = list.map(s => `<li><a href="#/s/${s.id}"><b>${esc(s.title || '未命名場次')}</b><span>${esc([fmtDate(s.createdAt), s.speaker, s.event, (s.n || 0) + ' 張', s.summary ? '已彙整' : '', s.questions ? '已擬提問' : ''].filter(Boolean).join('　'))}</span></a></li>`).join('');
   $('#homeEmpty').hidden = list.length > 0; $('#sessList').hidden = !list.length;
   quickTarget = list.slice().sort((a, b) => b.updatedAt - a.updatedAt).find(x => Date.now() - x.updatedAt < 3 * 3600e3) || null;   // 三小時內動過的場次就接續
@@ -1044,6 +1060,7 @@ async function showHome() {
   show('v-home'); scrollTo(0, 0);
 }
 async function loadSession(s) {
+  if (autoTitle(s)) await idb.put('sessions', s);
   cur = s; slides = (await idb.bySid(s.id)).map(x => live.get(x.id) || x).sort((a, b) => a.order - b.order);
   for (const x of slides.slice()) if (x.recording && !(recs[x.kind] && recs[x.kind].s === x)) {   // 上次錄到一半頁面被關掉：保留已存下的部分
     x.recording = false; const b = await mediaBlob(x); x.size = b.size;
@@ -1346,26 +1363,34 @@ $('#cTest').onclick = async () => {
 };
 
 /* ---------- 匯出 ---------- */
+const SCOPES = { all: '全部：彙整筆記、提問、每張照片（含手寫）和逐張筆記。', sumq: '彙整筆記與提問，含彙整裡附上的照片；不含逐張筆記。', sum: '只有彙整筆記，含彙整裡附上的照片。' };
+const wantQ = () => cfg.scope !== 'sum', wantSlides = () => cfg.scope === 'all';
+function scopeOk() { if (cfg.scope !== 'all' && !cur.summary) { toast('這一場還沒有彙整筆記。請先到「演講筆記」按「彙整演講筆記」，或改選「全部」', 5000); return false; } return true; }
 function exportMd() {
   let t = cur.summary ? cur.summary.trim().replace(/^\s*\[\[([^\]]+)\]\]\s*$/gm, '（照片：$1）') + '\n' : `# ${cur.title || '未命名場次'}\n\n${[cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜')}\n`;
-  if (cur.questions) t += '\n---\n\n# 可以提問的問題\n\n' + cur.questions.trim() + '\n';
+  if (cur.questions && wantQ()) t += '\n---\n\n# 可以提問的問題\n\n' + cur.questions.trim() + '\n';
+  if (!wantSlides()) return t;
   t += '\n---\n\n# 逐張筆記\n';
   slides.forEach((s, i) => { t += `\n### S${i + 1}\n\n${(s.ai || '（未辨識）').replace(/^(#{1,3})\s/gm, '#### ')}\n`; if (s.text.trim()) t += `\n> 打字註記：${s.text.trim().replace(/\n/g, '\n> ')}\n`; });
   return t;
 }
-const fileBase = () => (cur.title || '演講筆記').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) + '_' + fmtDate(cur.createdAt).slice(0, 10).replace(/\//g, '');
+const fileBase = () => (cur.title || '演講筆記').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) + '_' + fmtDate(cur.createdAt).slice(0, 10).replace(/\//g, '') + ({ sumq: '_彙整與提問', sum: '_彙整筆記' }[cfg.scope] || '');
 function download(name, text, type) { const u = URL.createObjectURL(new Blob([text], { type })), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }
-$('#btnExport').onclick = () => { openDlg(dlgX); preparePrint(); }; $('#xClose').onclick = () => closeDlg(dlgX);
-$('#xCopy').onclick = async () => { try { await navigator.clipboard.writeText(exportMd()); toast('已複製'); } catch (e) { toast('這個瀏覽器不允許複製，請改用下載'); } };
-$('#xMd').onclick = () => download(fileBase() + '.md', exportMd(), 'text/markdown;charset=utf-8');
+function renderScope() { $$('#xScope button').forEach(b => { const on = b.dataset.v === cfg.scope; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); }); $('#xScopeHint').textContent = SCOPES[cfg.scope]; }
+$$('#xScope button').forEach(b => b.onclick = () => { cfg.scope = b.dataset.v; saveCfg(); renderScope(); preparePrint(); });
+$('#btnExport').onclick = () => { if (!SCOPES[cfg.scope]) cfg.scope = 'all'; renderScope(); openDlg(dlgX); preparePrint(); }; $('#xClose').onclick = () => closeDlg(dlgX);
+$('#xCopy').onclick = async () => { if (!scopeOk()) return; try { await navigator.clipboard.writeText(exportMd()); toast('已複製'); } catch (e) { toast('這個瀏覽器不允許複製，請改用下載'); } };
+$('#xMd').onclick = () => scopeOk() && download(fileBase() + '.md', exportMd(), 'text/markdown;charset=utf-8');
 async function exportBody(imgMax) {   // 離線 HTML 與 PDF 共用：彙整、提問、逐張（照片含手寫）
   let body = cur.summary ? await figsToImages(md(withAutoFigs(cur.summary)), Math.min(imgMax, 1100)) : `<h1>${esc(cur.title || '未命名場次')}</h1><p>${esc([cur.speaker, cur.event, fmtDate(cur.createdAt).slice(0, 10)].filter(Boolean).join('｜'))}</p>`;
-  if (cur.questions) body += '<h1 class="part">可以提問的問題</h1>' + await figsToImages(md(withAutoFigs(cur.questions, 2)), Math.min(imgMax, 1100));
+  if (cur.questions && wantQ()) body += '<h1 class="part">可以提問的問題</h1>' + await figsToImages(md(withAutoFigs(cur.questions, 2)), Math.min(imgMax, 1100));
+  if (!wantSlides()) return body;
   if (slides.length) body += '<h1 class="part">逐張筆記</h1>';
   for (let i = 0; i < slides.length; i++) { const s = slides[i]; body += `<section><div class="ph"><p class="n">S${i + 1}${isMedia(s) ? `　${s.kind === 'audio' ? '錄音' : '錄影'} ${mmss(s.dur)}` : ''}</p><img src="${await composite(s, imgMax, 0.8)}" alt="S${i + 1}"></div>${hasPad(s) ? `<img class="padimg" src="${padImage(s)}" alt="S${i + 1} 手寫筆記">` : ''}${md(s.ai)}${s.text.trim() ? `<blockquote>打字註記：${esc(s.text.trim()).replace(/\n/g, '<br>')}</blockquote>` : ''}</section>`; }
   return body;
 }
 $('#xHtml').onclick = async () => {
+  if (!scopeOk()) return;
   const b = $('#xHtml'); b.disabled = true; b.textContent = '製作中…';
   try {
     const body = await exportBody(1400);
@@ -1386,7 +1411,7 @@ function preparePrint() {
     if (job === printJob) { b.disabled = false; b.textContent = '存成 PDF（開啟列印畫面）'; }
   }).catch(() => { if (job === printJob) b.textContent = 'PDF 準備失敗，請關閉後再開一次'; });
 }
-$('#xPdf').onclick = () => { closeDlg(dlgX); document.title = fileBase(); window.print(); };
+$('#xPdf').onclick = () => { if (!scopeOk()) return; closeDlg(dlgX); document.title = fileBase(); window.print(); };
 addEventListener('afterprint', () => { document.title = '開會拍照速記'; });
 
 /* ---------- 匯出 PowerPoint（PptxGenJS，按下時才從 CDN 載入） ---------- */
@@ -1504,7 +1529,7 @@ async function buildPptx() {
   const cover = pres.addSlide({ masterName: 'COVER' });
   cover.addText(cur.title || '未命名場次', { placeholder: 'title' });
   cover.addText([cur.speaker, cur.event, date].filter(Boolean).join('｜'), { x: PP.MX, y: 4.2, w: PP.BW, h: 0.5, fontSize: 20, color: PP.INK, fontFace: PP.FONT, margin: 0, isTextBox: true });
-  cover.addText(`聽講筆記｜投影片照片 ${slides.length} 張`, { x: PP.MX, y: 4.75, w: PP.BW, h: 0.4, fontSize: 14, color: PP.GRAY, fontFace: PP.FONT, margin: 0, isTextBox: true });
+  cover.addText({ all: `聽講筆記｜投影片照片 ${slides.length} 張`, sumq: '彙整筆記與提問', sum: '彙整筆記' }[cfg.scope], { x: PP.MX, y: 4.75, w: PP.BW, h: 0.4, fontSize: 14, color: PP.GRAY, fontFace: PP.FONT, margin: 0, isTextBox: true });
   // 彙整筆記、提問
   const splitSub = sec => {   // 有照片的章節：每個 ### 小節自己一張，照片跟著它的重點
     if (!sec.blocks.some(b => b.t === 'fig')) return [sec];
@@ -1513,10 +1538,10 @@ async function buildPptx() {
     return out.filter(x => x.blocks.length);
   };
   if (cur.summary) for (const sec of packSections(mdSections(withAutoFigs(cur.summary)), 18).flatMap(splitSub)) await flow(sec.title || '彙整筆記', sec.blocks, sec.merged ? [18, 16] : [20, 18, 16, 14], '彙整筆記（AI 依逐張筆記整理）');
-  if (cur.questions) for (const sec of mdSections(withAutoFigs(cur.questions, 2))) await flow(sec.title || '提問', sec.blocks, [20, 18, 16], '可以提問的問題');
+  if (cur.questions && wantQ()) for (const sec of mdSections(withAutoFigs(cur.questions, 2))) await flow(sec.title || '提問', sec.blocks, [20, 18, 16], '可以提問的問題');
   // 逐張：左條列、右照片；完整筆記放備忘稿
   const TW = 5.75, IX = PP.MX + TW + 0.3, IW = PP.W - PP.MX - IX;
-  for (let i = 0; i < slides.length; i++) {
+  if (wantSlides()) for (let i = 0; i < slides.length; i++) {
     const s = slides[i], title = `S${i + 1}　${slideTitle(s)}`;
     const all = mdBlocks(s.ai); if (all.length && all[0].t === 'h') all.shift();
     const typed = s.text.trim(); if (typed && (s.dirty || !s.ai)) all.push({ t: 'p', text: '**打字註記**：' + typed.replace(/\s*\n\s*/g, ' ') });
@@ -1550,6 +1575,7 @@ async function buildPptx() {
   return blob;
 }
 $('#xPptx').onclick = async () => {
+  if (!scopeOk()) return;
   const b = $('#xPptx'); b.disabled = true; b.textContent = '製作 PowerPoint 中…';
   try { download(fileBase() + '.pptx', await buildPptx(), 'application/vnd.openxmlformats-officedocument.presentationml.presentation'); }
   catch (e) { toast('PowerPoint 匯出失敗：' + (e.message || e), 6000); }
