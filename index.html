@@ -103,6 +103,15 @@ button{cursor:pointer}
 .sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--rule);padding:0}
 .sw.on{outline:3px solid var(--pen);outline-offset:2px}
 .drawset{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.pickbar{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.9rem;color:var(--ink2)}
+.pickbar .txt{padding:8px 6px;min-height:40px}
+.picklist{max-height:38vh;overflow:auto;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);margin:4px 0 14px}
+.picklist label{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid var(--rule);cursor:pointer}
+.picklist label:last-child{border-bottom:0}
+.picklist input{width:20px;height:20px;flex:none;margin-top:2px}
+.picklist b{display:block;font-weight:700;line-height:1.35}
+.picklist span{font-size:.82rem;color:var(--ink2)}
+.picklist label.off{opacity:.55;cursor:default}
 .homeacts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
 .homeacts:not(:has(button:not([hidden]))){display:none}
 .homeacts .btn{font-size:.9rem;min-height:40px;padding:6px 12px}
@@ -409,15 +418,16 @@ dialog a{color:var(--pen)}
 </dialog>
 
 <dialog id="dlgAll">
-  <h2>匯出所有彙整筆記</h2>
-  <p id="allInfo"></p>
+  <h2>匯出彙整筆記</h2>
+  <div class="pickbar"><span id="allInfo"></span><span><button class="txt" id="allSel">全選</button><button class="txt" id="allNone">全不選</button></span></div>
+  <div class="picklist" id="allPick"></div>
   <div class="stack">
     <button class="btn" id="aPptx">下載 PowerPoint（.pptx）</button>
     <button class="btn" id="aPdf" disabled>PDF 準備中…</button>
     <button class="btn" id="aHtml">下載離線 HTML（含照片）</button>
     <button class="btn" id="aMd">下載 .md</button>
   </div>
-  <small>每一場的彙整筆記依日期由新到舊排在一起，含彙整裡附上的照片；提問與逐張筆記不含。PDF 的存法和單場匯出一樣。</small>
+  <small>勾選的場次依日期由新到舊排在一起，內容是每場的彙整筆記，含彙整裡附上的照片；提問與逐張筆記不含。還沒彙整的場次不能勾，請先到該場按「彙整演講筆記」。PDF 的存法和單場匯出一樣。</small>
   <div class="dlgrow"><button class="btn" id="aClose">關閉</button></div>
 </dialog>
 
@@ -1077,7 +1087,7 @@ async function showHome() {
   $('#quickHint').textContent = quickTarget ? `拍照會接續「${quickTarget.title || '未命名場次'}」` : '拍照會開一個新場次';
   const untitled = list.filter(x => !x.title).length, summed = list.filter(x => x.summary).length;
   $('#btnAiName').hidden = !untitled; $('#btnAiName').textContent = `AI 命名未命名場次（${untitled}）`;
-  $('#btnAllExp').hidden = !summed; $('#btnAllExp').textContent = `匯出所有彙整筆記（${summed}）`;
+  $('#btnAllExp').hidden = !summed; $('#btnAllExp').textContent = `匯出彙整筆記（${summed} 場）`;
   $('#keyWarn').hidden = !!cfg.key;
   show('v-home'); scrollTo(0, 0);
 }
@@ -1621,26 +1631,35 @@ $('#xPptx').onclick = async () => {
 };
 /* ---------- 首頁：匯出所有彙整筆記 ---------- */
 async function withSession(sess, list, fn) { const c = cur, sl = slides; cur = sess; slides = list; try { return await fn(); } finally { cur = c; slides = sl; } }   // 借用單場的匯出程式
-async function summaryTargets() {
-  const out = [];
-  for (const s of (await idb.all('sessions')).filter(x => x.summary).sort((a, b) => b.createdAt - a.createdAt)) out.push({ sess: s, list: (await idb.bySid(s.id)).sort((a, b) => a.order - b.order) });
-  return out;
-}
-let allTargets = [];
+let allTargets = [], allChoices = [], pickT;
 async function allBody(imgMax) {
   let html = `<h1>彙整筆記合輯</h1><p>${allTargets.length} 場｜${fmtDate(Date.now()).slice(0, 10)} 匯出</p><ol>` + allTargets.map(t => `<li>${esc(t.sess.title || '未命名場次')}｜${fmtDate(t.sess.createdAt).slice(0, 10)}</li>`).join('') + '</ol>';
   scopeNow = 'sum';
   try { for (const t of allTargets) html += '<div class="sessbrk">' + await withSession(t.sess, t.list, () => exportBody(imgMax)) + '</div>'; } finally { scopeNow = null; }
   return html;
 }
-const allBase = () => '彙整筆記合輯_' + fmtDate(Date.now()).slice(0, 10).replace(/\//g, '');
+const allBase = () => (allTargets.length === 1 ? (allTargets[0].sess.title || '演講筆記').replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) + '_彙整筆記_' : `彙整筆記合輯_${allTargets.length}場_`) + fmtDate(Date.now()).slice(0, 10).replace(/\//g, '');
 const dlgA = $('#dlgAll');
-$('#btnAllExp').onclick = async () => {
-  allTargets = await summaryTargets();
-  const all = (await idb.all('sessions')).length;
-  $('#allInfo').textContent = `共 ${allTargets.length} 場有彙整筆記` + (all > allTargets.length ? `；另外 ${all - allTargets.length} 場還沒彙整，不會包含。` : '。');
-  openDlg(dlgA); preparePrint($('#aPdf'), () => allBody(1400));
+$('#btnAllExp').onclick = async () => {   // 列出所有場次讓使用者勾選；沒彙整的不能勾
+  const sessions = (await idb.all('sessions')).sort((a, b) => b.createdAt - a.createdAt);
+  allChoices = [];
+  for (const x of sessions) allChoices.push({ sess: x, list: x.summary ? (await idb.bySid(x.id)).sort((a, b) => a.order - b.order) : [] });
+  $('#allPick').innerHTML = allChoices.map((c, i) => `<label class="${c.sess.summary ? '' : 'off'}"><input type="checkbox" data-i="${i}" ${c.sess.summary ? 'checked' : 'disabled'}><div><b>${esc(c.sess.title || '未命名場次')}</b><span>${esc([fmtDate(c.sess.createdAt), c.sess.speaker, c.sess.event, c.sess.summary ? '' : '還沒彙整'].filter(Boolean).join('　'))}</span></div></label>`).join('');
+  $$('#allPick input').forEach(cb => cb.onchange = pickChanged);
+  openDlg(dlgA); pickChanged();
 };
+function pickChanged() {
+  allTargets = $$('#allPick input:checked').map(cb => allChoices[+cb.dataset.i]);
+  const n = allTargets.length, can = allChoices.filter(c => c.sess.summary).length;
+  $('#allInfo').textContent = `已選 ${n}／${can} 場`;
+  ['#aPptx', '#aHtml', '#aMd'].forEach(id => { $(id).disabled = !n; });
+  clearTimeout(pickT); printJob = null;
+  if (!n) { $('#aPdf').disabled = true; $('#aPdf').textContent = '請至少勾選一場'; return; }
+  $('#aPdf').disabled = true; $('#aPdf').textContent = 'PDF 準備中…';
+  pickT = setTimeout(() => preparePrint($('#aPdf'), () => allBody(1400)), 400);   // 勾選停下來才重新準備 PDF
+}
+$('#allSel').onclick = () => { $$('#allPick input:not(:disabled)').forEach(cb => { cb.checked = true; }); pickChanged(); };
+$('#allNone').onclick = () => { $$('#allPick input').forEach(cb => { cb.checked = false; }); pickChanged(); };
 $('#aClose').onclick = () => closeDlg(dlgA);
 $('#aPdf').onclick = () => { closeDlg(dlgA); document.title = allBase(); window.print(); };
 $('#aMd').onclick = async () => {
